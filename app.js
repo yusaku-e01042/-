@@ -497,6 +497,7 @@
     formH.name.value = v.name || '';
     formH.qty.value = v.qty ?? '';
     formH.cost.value = v.cost ?? '';
+    formH.avg.value = '';
     formH.nav.value = v.nav ?? '';
     formH.freq.value = (v.tsumitate && v.tsumitate.freq) || '';
     formH.amount.value = (v.tsumitate && v.tsumitate.amount) || '';
@@ -505,7 +506,17 @@
     dlgH.showModal();
   }
 
-  formH.type.addEventListener('change', syncTypeVisibility);
+  formH.type.addEventListener('change', () => { syncTypeVisibility(); calcCostFromAvg(); });
+
+  /** 平均取得単価 × 数量 で投資金額を自動計算（投資信託は1万口あたり） */
+  function calcCostFromAvg() {
+    const avg = num(formH.avg.value), qty = num(formH.qty.value);
+    if (!(avg > 0) || !(qty > 0)) return;
+    const per = formH.type.value === 'fund' ? 10000 : 1;
+    formH.cost.value = Math.round((qty * avg) / per);
+  }
+  formH.avg.addEventListener('input', calcCostFromAvg);
+  formH.qty.addEventListener('input', calcCostFromAvg);
   formH.addEventListener('submit', (e) => {
     e.preventDefault();
     const f = formH;

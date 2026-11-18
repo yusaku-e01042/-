@@ -175,9 +175,14 @@
         <small class="for-stock">PayPay証券の端数（例: 0.123456株）もそのまま入力</small>
       </label>
 
+      <label>平均取得単価（円・任意）
+        <input name="avg" type="number" step="any" min="0" inputmode="decimal" placeholder="入れると下の投資金額を自動計算">
+        <small><span class="for-stock">1株あたりの平均取得単価</span><span class="for-fund">1万口あたりの平均取得単価</span>。アプリにこれしか出ていない場合に使います</small>
+      </label>
+
       <label>投資金額の合計（円）
         <input name="cost" type="number" step="any" min="0" inputmode="decimal" required>
-        <small>アプリの「取得金額」や「投資額」。これまで買った合計額です</small>
+        <small>これまで買った合計額（アプリの「取得金額」）。これまでの積立分もすべて含めた金額です</small>
       </label>
 
       <label class="for-fund">基準価額（1万口あたり・円）
