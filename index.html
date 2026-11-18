@@ -187,6 +187,20 @@
 
       <label class="for-fund">基準価額（1万口あたり・円）
         <input name="nav" type="number" step="any" min="0" inputmode="decimal">
+        <small>アプリや運用会社のサイトに出ている最新の基準価額</small>
+      </label>
+
+      <label class="for-fund">値動きの連動先（任意・リアルタイム推定）
+        <select name="proxy">
+          <option value="">なし（基準価額を毎回手入力）</option>
+          <option value="1540.T">金（純金上場信託 1540）… 純金ファンド向け</option>
+          <option value="GC=F">金先物（ドル建て・円換算）</option>
+          <option value="VOO">S&amp;P500（VOO・円換算）</option>
+          <option value="VT">全世界株（VT・円換算）</option>
+          <option value="QQQ">NASDAQ100（QQQ・円換算）</option>
+          <option value="1306.T">TOPIX（1306）</option>
+        </select>
+        <small>基準価額は1日1回しか出ないため、連動する銘柄の値動きから「今いくらか」を推定します</small>
       </label>
 
       <fieldset>

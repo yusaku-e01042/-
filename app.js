@@ -174,7 +174,7 @@
 
   async function refresh({ manual = false } = {}) {
     if (refreshing) return;
-    const syms = [...new Set(state.holdings.filter((h) => h.type === 'stock' && h.symbol).map((h) => h.symbol))];
+    const syms = [...new Set(state.holdings.map((h) => (h.type === 'stock' ? h.symbol : h.proxy)).filter(Boolean))];
     if (!syms.length) { render(); return; }
     refreshing = true;
     $('#btn-refresh').classList.add('spinning');
@@ -195,6 +195,7 @@
         catch { failed++; }
       });
       saveQuotes();
+      fillProxyRefs();
       const dot = $('#live-dot');
       dot.className = 'dot ' + (failed === 0 ? 'live' : failed < syms.length ? 'live' : 'err');
       if (failed && manual) toast(`${failed}件の価格を取得できませんでした（前回の値を表示中）`);
@@ -220,11 +221,53 @@
     return { now: f.price, prev: Number.isFinite(f.prev) ? f.prev : f.price };
   }
 
+  /** 連動先の円換算価格 { now, prev } */
+  function proxyYen(sym) {
+    const q = quotes[sym];
+    const fx = q && fxFor(q.currency);
+    if (!q || !Number.isFinite(q.price) || !fx) return null;
+    return { now: q.price * fx.now, prev: q.prev * fx.prev };
+  }
+
+  /**
+   * 基準価額を入れた時点の連動先価格（基準点）を記録する。
+   * 日本の投信の基準価額はその日の終値ベースなので、東証銘柄は
+   * 取引時間中なら前日終値、それ以外（寄り付き前・引け後・休日）は最新値を基準点にする。
+   */
+  function fillProxyRefs() {
+    let changed = false;
+    for (const h of state.holdings) {
+      if (h.type !== 'fund' || !h.proxy || h.proxyRef) continue;
+      const p = proxyYen(h.proxy);
+      if (!p) continue;
+      let ref = p.now;
+      if (/\.T$/.test(h.proxy)) {
+        // 取引時間中(9:00〜15:30)は「前日終値」が最新の基準価額に対応する
+        if (marketStatus('Asia/Tokyo', [[540, 930, 'open']])) ref = p.prev;
+      }
+      h.proxyRef = ref;
+      changed = true;
+    }
+    if (changed) save();
+  }
+
   function evaluate(h) {
     const cost = num(h.cost), qty = num(h.qty);
-    const r = { h, cost, qty, value: null, prevValue: null, gain: null, gainPct: null, day: null, dayPct: null, q: null };
+    const r = { h, cost, qty, value: null, prevValue: null, gain: null, gainPct: null, day: null, dayPct: null, q: null, estNav: null };
     if (h.type === 'fund') {
-      if (num(h.nav) > 0) { r.value = qty * num(h.nav) / 10000; r.prevValue = r.value; }
+      const nav = num(h.nav);
+      if (nav > 0) {
+        const p = h.proxy && h.proxyRef ? proxyYen(h.proxy) : null;
+        if (p) {
+          r.q = quotes[h.proxy];
+          r.estNav = nav * p.now / h.proxyRef;
+          r.value = qty * r.estNav / 10000;
+          r.prevValue = qty * (nav * p.prev / h.proxyRef) / 10000;
+        } else {
+          r.value = qty * nav / 10000;
+          r.prevValue = r.value;
+        }
+      }
     } else {
       const q = quotes[h.symbol];
       r.q = q || null;
@@ -342,7 +385,10 @@
         h.tsumitate && h.tsumitate.freq ? `<span class="tag">積立 ${FREQ_LABEL[h.tsumitate.freq]}${yen(num(h.tsumitate.amount))}</span>` : '',
       ].join('');
       let priceHtml;
-      if (h.type === 'fund') {
+      if (h.type === 'fund' && r.estNav != null) {
+        const dp = r.prevValue > 0 ? r.day / r.prevValue : 0;
+        priceHtml = `<div class="p">${Math.round(r.estNav).toLocaleString('ja-JP')}円</div><div class="c ${cls(r.day)}">${pct(dp)}</div><div class="c" style="color:var(--text-3)">推定基準価額</div>`;
+      } else if (h.type === 'fund') {
         priceHtml = `<div class="p">${num(h.nav) ? num(h.nav).toLocaleString('ja-JP') + '円' : '—'}</div><div class="c" style="color:var(--text-3)">基準価額(手入力)</div>`;
       } else if (q && Number.isFinite(q.price)) {
         const d = q.price - q.prev, dp = q.prev ? d / q.prev : 0;
@@ -350,8 +396,10 @@
       } else {
         priceHtml = `<div class="p">—</div><div class="c" style="color:var(--text-3)">取得中…</div>`;
       }
-      const err = q && q.error && h.type === 'stock'
-        ? `<div class="h-err">価格の取得に失敗${Number.isFinite(q.price) ? '（前回の値を表示中）' : ''}</div>` : '';
+      const err = q && q.error
+        ? `<div class="h-err">${h.type === 'fund' ? '連動先の' : ''}価格の取得に失敗${Number.isFinite(q.price) ? '（前回の値を表示中）' : ''}</div>` : '';
+      const fundNote = h.type === 'fund' && h.proxy
+        ? `<div class="k">入力した基準価額 ${num(h.nav).toLocaleString('ja-JP')}円 をもとに、${esc(h.proxy)} の値動きで推定中</div>` : '';
       return `
         <article class="h-item" data-id="${h.id}">
           <div class="h-top">
@@ -367,6 +415,7 @@
             <div><div class="k">今日</div><div class="v ${cls(r.day)}">${r.day == null ? '—' : yen(r.day, { sign: true })}</div></div>
             <div><div class="k">${h.type === 'fund' ? '口数' : '数量'} / 投資額</div><div class="v" style="font-weight:500">${fmtQty(r.qty)}<br>${yen(r.cost)}</div></div>
           </div>
+          ${fundNote}
           ${err}
           <div class="h-actions">
             <button class="btn small" data-act="buy">＋ 買付を記録</button>
@@ -378,17 +427,18 @@
     // 値が動いたらフラッシュ
     for (const r of rows) {
       if (!r.q || !Number.isFinite(r.q.price)) continue;
-      const before = lastPrices[r.h.symbol];
+      const key = r.h.symbol || r.h.proxy;
+      const before = lastPrices[key];
       if (before != null && before !== r.q.price) {
         const el = box.querySelector(`[data-id="${r.h.id}"]`);
         if (el) el.classList.add(r.q.price > before ? 'flash-up' : 'flash-down');
       }
     }
-    for (const r of rows) if (r.q && Number.isFinite(r.q.price)) lastPrices[r.h.symbol] = r.q.price;
+    for (const r of rows) if (r.q && Number.isFinite(r.q.price)) lastPrices[r.h.symbol || r.h.proxy] = r.q.price;
   }
 
   function displayName(h, q) {
-    return h.name || (q && q.name) || h.symbol || '（名称未設定）';
+    return h.name || (h.type === 'stock' && q && q.name) || h.symbol || '（名称未設定）';
   }
 
   function renderAlloc(all, rows) {
@@ -499,6 +549,7 @@
     formH.cost.value = v.cost ?? '';
     formH.avg.value = '';
     formH.nav.value = v.nav ?? '';
+    formH.proxy.value = v.proxy || '';
     formH.freq.value = (v.tsumitate && v.tsumitate.freq) || '';
     formH.amount.value = (v.tsumitate && v.tsumitate.amount) || '';
     $('#btn-delete').hidden = !h;
@@ -531,16 +582,23 @@
       qty: num(f.qty.value),
       cost: num(f.cost.value),
       nav: type === 'fund' ? num(f.nav.value) : 0,
+      proxy: type === 'fund' ? f.proxy.value : '',
+      proxyRef: null,
       tsumitate: f.freq.value ? { freq: f.freq.value, amount: num(f.amount.value) } : null,
     };
+    // 基準価額も連動先も変わっていなければ、基準点はそのまま使う
+    const old = state.holdings.find((x) => x.id === h.id);
+    if (old && old.proxy === h.proxy && num(old.nav) === h.nav) h.proxyRef = old.proxyRef || null;
     if (type === 'stock' && !h.symbol) { toast('ティッカー/証券コードを入れてください'); return; }
     const idx = state.holdings.findIndex((x) => x.id === h.id);
     if (idx >= 0) state.holdings[idx] = { ...state.holdings[idx], ...h };
     else state.holdings.push(h);
+    fillProxyRefs();
     save();
     dlgH.close();
     render();
-    if (type === 'stock' && !quotes[h.symbol]) refresh();
+    const watch = type === 'stock' ? h.symbol : h.proxy;
+    if (watch && !quotes[watch]) refresh();
   });
   $('#btn-delete').addEventListener('click', () => {
     if (!editingId) return;
@@ -618,6 +676,8 @@
         symbol: h.type === 'fund' ? '' : normalizeSymbol(h.symbol),
         name: String(h.name || '').slice(0, 80),
         qty: num(h.qty), cost: num(h.cost), nav: num(h.nav),
+        proxy: h.type === 'fund' && typeof h.proxy === 'string' ? normalizeSymbol(h.proxy) : '',
+        proxyRef: num(h.proxyRef) || null,
         tsumitate: h.tsumitate && FREQ_LABEL[h.tsumitate.freq] ? { freq: h.tsumitate.freq, amount: num(h.tsumitate.amount) } : null,
       }));
       if (!confirm(`${clean.length}件の銘柄を読み込みます。今のデータは置き換わります。よろしいですか？`)) return;
