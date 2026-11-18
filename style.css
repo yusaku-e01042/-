@@ -304,3 +304,7 @@ dialog legend { font-size: 12px; color: var(--text-3); padding: 0 4px; }
 .input-unit select { flex: none; width: auto; }
 
 .value-preview { font-weight: 700; color: var(--text) !important; font-size: 14px !important; }
+
+.link-import { display: flex; gap: 8px; margin-top: 10px; }
+.link-import input { flex: 1; min-width: 0; }
+#btn-link-paste { width: 100%; }

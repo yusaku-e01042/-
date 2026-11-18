@@ -339,6 +339,15 @@
   <dialog id="dlg-settings">
     <form method="dialog" id="form-settings">
       <h2>設定</h2>
+      <fieldset>
+        <legend>リンクで銘柄を読み込む</legend>
+        <p class="note">読み込み用のリンク（…#import=…）をコピーしてから押してください。ホーム画面のアプリにはこちらから入れます。</p>
+        <button type="button" id="btn-link-paste" class="btn primary">コピーしたリンクを読み込む</button>
+        <div class="link-import">
+          <input id="link-import" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ここに長押しで貼り付けも可">
+          <button type="button" id="btn-link-import" class="btn">読み込む</button>
+        </div>
+      </fieldset>
       <label>自動更新の間隔
         <select name="refreshSec">
           <option value="15">15秒</option>

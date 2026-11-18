@@ -1118,17 +1118,35 @@
   }
 
   /** リンク（#import=...）で受け取った銘柄データを読み込む。データはURLの#以降なのでサーバーには送られない */
-  function importFromLink() {
-    const m = location.hash.match(/^#import=([A-Za-z0-9_-]+)$/);
-    if (!m) return;
-    history.replaceState(null, '', location.pathname + location.search);
+  function importFromText(text) {
+    const m = String(text || '').match(/#import=([A-Za-z0-9_-]+)/);
+    if (!m) { toast('読み込み用のリンクではないようです（#import= が含まれていません）'); return false; }
     try {
       const b64 = m[1].replace(/-/g, '+').replace(/_/g, '/');
       const bin = atob(b64 + '==='.slice((b64.length + 3) % 4));
       const json = new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
-      importHoldings(JSON.parse(json), 'リンク');
-    } catch { toast('リンクのデータを読み込めませんでした'); }
+      return importHoldings(JSON.parse(json), 'リンク');
+    } catch { toast('リンクのデータを読み込めませんでした（途中で切れているかもしれません）'); return false; }
   }
+  function importFromLink() {
+    if (!/^#import=/.test(location.hash)) return;
+    const hash = location.hash;
+    history.replaceState(null, '', location.pathname + location.search);
+    importFromText(hash);
+  }
+  // ホーム画面に追加したアプリはリンクを直接開けないので、設定から貼り付けて読み込む
+  $('#btn-link-paste').addEventListener('click', async () => {
+    let text = '';
+    try { text = await navigator.clipboard.readText(); } catch { /* 許可されなかった */ }
+    if (!text) { toast('コピーした内容を読めませんでした。下の欄に長押しで貼り付けてください', 4000); $('#link-import').focus(); return; }
+    importFromText(text);
+  });
+  $('#btn-link-import').addEventListener('click', () => {
+    if (importFromText($('#link-import').value)) $('#link-import').value = '';
+  });
+  $('#link-import').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); $('#btn-link-import').click(); }
+  });
   $('#btn-reset').addEventListener('click', () => {
     if (!confirm('すべての銘柄データを削除します。元に戻せません。よろしいですか？')) return;
     state.holdings = []; quotes = {}; save(); saveQuotes(); dlgS.close(); render();
