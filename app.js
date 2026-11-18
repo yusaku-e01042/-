@@ -606,7 +606,9 @@
       </div>
       <div class="goal-main">
         <div class="k">${years}年で${yen(goal)}にするには、毎月</div>
-        <p class="big">約${yen(needR)}<span class="k" style="font-weight:400">（${rl}の場合）</span></p>
+        ${needR > 0
+          ? `<p class="big">約${yen(needR)}<span class="k" style="font-weight:400">（${rl}の場合）</span></p>`
+          : `<p class="big">${rl}なら、積み立てなくても届く見込み</p>`}
         <p class="k">元本だけで貯めるなら 約${yen(need0)}</p>
       </div>
       <table class="goal-table">
@@ -927,26 +929,55 @@
     if (!file) return;
     try {
       const data = JSON.parse(await file.text());
-      const list = Array.isArray(data) ? data : data.holdings;
-      if (!Array.isArray(list)) throw new Error();
-      const clean = list.filter((h) => h && typeof h === 'object').map((h) => ({
-        id: String(h.id || uid()),
-        broker: h.broker === 'sbi' ? 'sbi' : 'paypay',
-        account: ACCOUNT_LABEL[h.account] ? h.account : 'tokutei',
-        type: h.type === 'fund' ? 'fund' : 'stock',
-        symbol: h.type === 'fund' ? '' : normalizeSymbol(h.symbol),
-        name: String(h.name || '').slice(0, 80),
-        qty: num(h.qty), cost: num(h.cost), nav: num(h.nav),
-        proxy: h.type === 'fund' && typeof h.proxy === 'string' ? normalizeSymbol(h.proxy) : '',
-        proxyRef: num(h.proxyRef) || null,
-        target: Number.isFinite(h.target) ? Math.max(0, Math.min(100, h.target)) : undefined,
-        tsumitate: h.tsumitate && FREQ_LABEL[h.tsumitate.freq] ? { freq: h.tsumitate.freq, amount: num(h.tsumitate.amount) } : null,
-      }));
-      if (!confirm(`${clean.length}件の銘柄を読み込みます。今のデータは置き換わります。よろしいですか？`)) return;
-      state.holdings = clean; save(); dlgS.close(); render(); refresh();
-      toast('読み込みました');
+      importHoldings(data, 'ファイル');
     } catch { toast('ファイルを読み込めませんでした'); }
   });
+
+  /** 外から来たデータを安全な形にそろえる */
+  function cleanHoldings(data) {
+    const list = Array.isArray(data) ? data : data && data.holdings;
+    if (!Array.isArray(list)) throw new Error('bad data');
+    return list.filter((h) => h && typeof h === 'object').map((h) => ({
+      id: String(h.id || uid()),
+      broker: h.broker === 'sbi' ? 'sbi' : 'paypay',
+      account: ACCOUNT_LABEL[h.account] ? h.account : 'tokutei',
+      type: h.type === 'fund' ? 'fund' : 'stock',
+      symbol: h.type === 'fund' ? '' : normalizeSymbol(h.symbol),
+      name: String(h.name || '').slice(0, 80),
+      qty: num(h.qty), cost: num(h.cost), nav: num(h.nav),
+      proxy: h.type === 'fund' && typeof h.proxy === 'string' ? normalizeSymbol(h.proxy) : '',
+      proxyRef: num(h.proxyRef) || null,
+      target: Number.isFinite(h.target) ? Math.max(0, Math.min(100, h.target)) : undefined,
+      tsumitate: h.tsumitate && FREQ_LABEL[h.tsumitate.freq] ? { freq: h.tsumitate.freq, amount: num(h.tsumitate.amount) } : null,
+    }));
+  }
+
+  function importHoldings(data, from) {
+    const clean = cleanHoldings(data);
+    const names = clean.map((h) => '・' + (h.name || h.symbol)).join('\n');
+    const msg = state.holdings.length
+      ? `${from}から${clean.length}件の銘柄を読み込みます。\n${names}\n\n今登録している${state.holdings.length}件は置き換わります。よろしいですか？`
+      : `${from}から${clean.length}件の銘柄を読み込みます。\n${names}\n\nよろしいですか？`;
+    if (!confirm(msg)) return false;
+    state.holdings = clean; save();
+    if (dlgS.open) dlgS.close();
+    render(); refresh();
+    toast('読み込みました');
+    return true;
+  }
+
+  /** リンク（#import=...）で受け取った銘柄データを読み込む。データはURLの#以降なのでサーバーには送られない */
+  function importFromLink() {
+    const m = location.hash.match(/^#import=([A-Za-z0-9_-]+)$/);
+    if (!m) return;
+    history.replaceState(null, '', location.pathname + location.search);
+    try {
+      const b64 = m[1].replace(/-/g, '+').replace(/_/g, '/');
+      const bin = atob(b64 + '==='.slice((b64.length + 3) % 4));
+      const json = new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+      importHoldings(JSON.parse(json), 'リンク');
+    } catch { toast('リンクのデータを読み込めませんでした'); }
+  }
   $('#btn-reset').addEventListener('click', () => {
     if (!confirm('すべての銘柄データを削除します。元に戻せません。よろしいですか？')) return;
     state.holdings = []; quotes = {}; save(); saveQuotes(); dlgS.close(); render();
@@ -992,6 +1023,8 @@
 
   // ---------- 起動 ----------
   render();
+  importFromLink();
+  window.addEventListener('hashchange', importFromLink);
   refresh();
   scheduleRefresh();
 })();

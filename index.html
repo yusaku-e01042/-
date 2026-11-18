@@ -31,6 +31,29 @@
   </header>
 
   <main class="wrap">
+    <!-- 目標金額 -->
+    <section class="card" id="goal-card">
+      <h2>目標まで</h2>
+      <div class="goal-head">
+        <div>
+          <div class="k">今（<span id="goal-scope">PayPay証券</span>）</div>
+          <div class="v strong" id="goal-now">—</div>
+        </div>
+        <label class="goal-target">目標
+          <span><input id="goal-amount" type="number" step="10000" min="0" inputmode="numeric">円</span>
+        </label>
+      </div>
+      <div class="goal-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="goal-bar"><span id="goal-fill"></span></div>
+      <div class="goal-pct"><span id="goal-pct">—</span><span id="goal-left"></span></div>
+
+      <div class="sim-inputs" style="margin-top:14px">
+        <label>毎月の積立<span><input id="goal-monthly" type="number" step="1000" min="0" inputmode="numeric">円</span></label>
+        <label>想定利回り（年）<span><input id="goal-rate" type="number" step="0.5" min="-20" max="30">%</span></label>
+        <label>何年で達成したい？<span><input id="goal-years" type="number" step="1" min="1" max="50" inputmode="numeric">年</span></label>
+      </div>
+      <div id="goal-result"></div>
+    </section>
+
     <!-- サマリー -->
     <section class="card hero" aria-live="polite">
       <div class="hero-label">
@@ -60,29 +83,6 @@
         <button role="tab" data-scope="all">すべて</button>
         <button role="tab" data-scope="sbi">SBI証券</button>
       </div>
-    </section>
-
-    <!-- 目標金額 -->
-    <section class="card" id="goal-card">
-      <h2>目標まで</h2>
-      <div class="goal-head">
-        <div>
-          <div class="k">今（<span id="goal-scope">PayPay証券</span>）</div>
-          <div class="v strong" id="goal-now">—</div>
-        </div>
-        <label class="goal-target">目標
-          <span><input id="goal-amount" type="number" step="10000" min="0" inputmode="numeric">円</span>
-        </label>
-      </div>
-      <div class="goal-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="goal-bar"><span id="goal-fill"></span></div>
-      <div class="goal-pct"><span id="goal-pct">—</span><span id="goal-left"></span></div>
-
-      <div class="sim-inputs" style="margin-top:14px">
-        <label>毎月の積立<span><input id="goal-monthly" type="number" step="1000" min="0" inputmode="numeric">円</span></label>
-        <label>想定利回り（年）<span><input id="goal-rate" type="number" step="0.5" min="-20" max="30">%</span></label>
-        <label>何年で達成したい？<span><input id="goal-years" type="number" step="1" min="1" max="50" inputmode="numeric">年</span></label>
-      </div>
-      <div id="goal-result"></div>
     </section>
 
     <!-- 税金 -->
