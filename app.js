@@ -394,7 +394,7 @@
         const dp = r.prevValue > 0 ? r.day / r.prevValue : 0;
         priceHtml = `<div class="p">${Math.round(r.estNav).toLocaleString('ja-JP')}円</div><div class="c ${cls(r.day)}">${pct(dp)}</div><div class="c" style="color:var(--text-3)">推定基準価額</div>`;
       } else if (h.type === 'fund') {
-        priceHtml = `<div class="p">${num(h.nav) ? num(h.nav).toLocaleString('ja-JP') + '円' : '—'}</div><div class="c" style="color:var(--text-3)">基準価額(手入力)</div>`;
+        priceHtml = `<div class="p">${num(h.nav) ? Math.round(num(h.nav)).toLocaleString('ja-JP') + '円' : '—'}</div><div class="c" style="color:var(--text-3)">基準価額</div>`;
       } else if (q && Number.isFinite(q.price)) {
         const d = q.price - q.prev, dp = q.prev ? d / q.prev : 0;
         priceHtml = `<div class="p">${fmtPrice(q.price, q.currency)}</div><div class="c ${cls(d * 1000)}">${d >= 0 ? '+' : '−'}${fmtPrice(Math.abs(d), q.currency)} (${pct(dp)})</div>`;
@@ -403,8 +403,14 @@
       }
       const err = q && q.error
         ? `<div class="h-err">${h.type === 'fund' ? '連動先の' : ''}価格の取得に失敗${Number.isFinite(q.price) ? '（前回の値を表示中）' : ''}</div>` : '';
-      const fundNote = h.type === 'fund' && h.proxy
-        ? `<div class="k">入力した基準価額 ${num(h.nav).toLocaleString('ja-JP')}円 をもとに、${esc(h.proxy)} の値動きで推定中</div>` : '';
+      let fundNote = '';
+      if (h.type === 'fund') {
+        const age = navAgeDays(h);
+        fundNote = r.estNav != null
+          ? `<div class="k">${age == null ? '入力した' : navDateLabel(h) + 'の'}基準価額をもとに、${esc(h.proxy)} の値動きで推定中</div>`
+          : `<div class="k">${age == null ? '手入力の' : age === 0 ? '今日入れた' : navDateLabel(h) + 'に入れた'}評価額で表示中</div>`;
+        if (age == null || age >= 7) fundNote += `<div class="h-err">${age == null ? 'いつの金額か分かりません。' : `${age}日間更新していません。`}PayPay証券の評価額を入れてください</div>`;
+      }
       return `
         <article class="h-item" data-id="${h.id}">
           <div class="h-top">
@@ -423,6 +429,7 @@
           ${fundNote}
           ${err}
           <div class="h-actions">
+            ${h.type === 'fund' ? '<button class="btn small" data-act="value">評価額を入れる</button>' : ''}
             <button class="btn small" data-act="buy">＋ 買付を記録</button>
             <button class="btn small" data-act="edit">編集</button>
           </div>
@@ -678,13 +685,20 @@
       </div>
       <p>PayPay証券に <strong>${yen(budget)}</strong> を入金${buys.length ? 'して、これを買います' : 'します'}</p>
       ${buys.length ? `<ul>${buys.map((b) => `<li>${esc(b.x.name)}：<strong>${yen(b.a)}</strong></li>`).join('')}</ul>` : ''}
+      ${staleFunds().length ? `<p class="alert-sub">ついでに、PayPay証券の評価額も入れておくと金額が正確になります</p>
+      <div class="alert-actions left">${staleFunds().map((h) => `<button type="button" class="btn small" data-act="value" data-id="${h.id}">評価額を入れる（${esc(displayName(h, null))}）</button>`).join('')}</div>` : ''}
       <div class="alert-actions">
         <button type="button" class="btn primary small" data-act="done">${st.alert === 'soon' ? '先に入金した' : '入金した'}</button>
       </div>`;
     box.dataset.target = ymKey(st.target);
   }
 
+  /** PayPay証券の投資信託で、今日まだ評価額を入れていないもの */
+  const staleFunds = () => state.holdings.filter((h) => h.broker === 'paypay' && h.type === 'fund' && navAgeDays(h) !== 0);
+
   $('#deposit-alert').addEventListener('click', (e) => {
+    const v = e.target.closest('[data-act="value"]');
+    if (v) { const h = state.holdings.find((x) => x.id === v.dataset.id); if (h) openValue(h); return; }
     if (!e.target.closest('[data-act="done"]')) return;
     state.settings.depositDone = $('#deposit-alert').dataset.target;
     save(); render();
@@ -930,6 +944,7 @@
     // 基準価額も連動先も変わっていなければ、基準点はそのまま使う
     const old = state.holdings.find((x) => x.id === h.id);
     if (old && old.proxy === h.proxy && num(old.nav) === h.nav) h.proxyRef = old.proxyRef || null;
+    if (type === 'fund') h.navDate = old && num(old.nav) === h.nav ? old.navDate : todayStr();
     if (type === 'stock' && !h.symbol) { toast('ティッカー/証券コードを入れてください'); return; }
     const idx = state.holdings.findIndex((x) => x.id === h.id);
     if (idx >= 0) state.holdings[idx] = { ...state.holdings[idx], ...h };
@@ -947,6 +962,50 @@
     if (!confirm(`「${displayName(h, quotes[h.symbol])}」を削除しますか？`)) return;
     state.holdings = state.holdings.filter((x) => x.id !== editingId);
     save(); dlgH.close(); render();
+  });
+
+  // ---------- 評価額ダイアログ（投資信託） ----------
+  const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  function navAgeDays(h) {
+    if (!h.navDate) return null;
+    const [y, m, d] = h.navDate.split('-').map(Number);
+    const n = new Date();
+    return Math.round((new Date(n.getFullYear(), n.getMonth(), n.getDate()) - new Date(y, m - 1, d)) / 86400000);
+  }
+  function navDateLabel(h) {
+    const age = navAgeDays(h);
+    if (age == null) return '以前';
+    if (age === 0) return '今日';
+    const [, m, d] = h.navDate.split('-').map(Number);
+    return `${m}月${d}日`;
+  }
+
+  const dlgV = $('#dlg-value');
+  const formV = $('#form-value');
+  let valuingId = null;
+  function openValue(h) {
+    valuingId = h.id;
+    formV.reset();
+    const r = evaluate(h);
+    $('#value-target').textContent = `${displayName(h, null)}（${BROKER_LABEL[h.broker]}・前回${navAgeDays(h) == null ? '' : ' ' + navDateLabel(h)}：${yen(r.value)}）`;
+    formV.qty.value = num(h.qty) || '';
+    formV.gainSign.value = r.gain != null && r.gain > 0 ? '+' : '-';
+    dlgV.showModal();
+    formV.value.focus();
+  }
+  formV.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const h = state.holdings.find((x) => x.id === valuingId);
+    if (!h) return;
+    const value = num(formV.value.value), qty = num(formV.qty.value);
+    if (!(value > 0) || !(qty > 0)) { toast('評価額と口数を入れてください'); return; }
+    h.qty = qty;
+    h.nav = (value * 10000) / qty; // 1万口あたりの基準価額に直す
+    h.navDate = todayStr();
+    h.proxyRef = null; // 連動先で推定する場合は、次に価格が取れた時点を基準にする
+    if (formV.gain.value !== '') h.cost = Math.max(0, value - (formV.gainSign.value === '-' ? -1 : 1) * num(formV.gain.value));
+    save(); dlgV.close(); render();
+    toast('評価額を更新しました');
   });
 
   // ---------- 買付ダイアログ ----------
@@ -1025,6 +1084,7 @@
       qty: num(h.qty), cost: num(h.cost), nav: num(h.nav),
       proxy: h.type === 'fund' && typeof h.proxy === 'string' ? normalizeSymbol(h.proxy) : '',
       proxyRef: num(h.proxyRef) || null,
+      navDate: /^\d{4}-\d{2}-\d{2}$/.test(h.navDate || '') ? h.navDate : undefined,
       target: Number.isFinite(h.target) ? Math.max(0, Math.min(100, h.target)) : undefined,
       tsumitate: h.tsumitate && FREQ_LABEL[h.tsumitate.freq] ? { freq: h.tsumitate.freq, amount: num(h.tsumitate.amount) } : null,
     }));
@@ -1072,6 +1132,7 @@
     if (!h) return;
     if (btn.dataset.act === 'edit') openHolding(h);
     if (btn.dataset.act === 'buy') openBuy(h);
+    if (btn.dataset.act === 'value') openValue(h);
   });
   $$('.scope-tabs button').forEach((b) => b.addEventListener('click', () => {
     state.settings.scope = b.dataset.scope; save(); render();

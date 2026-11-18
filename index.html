@@ -289,6 +289,32 @@
   </dialog>
 
   <!-- 買付を記録 -->
+  <dialog id="dlg-value">
+    <form method="dialog" id="form-value">
+      <h2>評価額を入れる</h2>
+      <p class="note" id="value-target"></p>
+      <label>評価額（PayPay証券に出ている金額）
+        <span class="input-unit"><input name="value" type="number" step="1" min="1" inputmode="numeric" required>円</span>
+      </label>
+      <label>損益（任意）
+        <span class="input-unit">
+          <select name="gainSign" aria-label="プラスかマイナスか"><option value="-">−（マイナス）</option><option value="+">＋（プラス）</option></select>
+          <input name="gain" type="number" step="1" min="0" inputmode="numeric">円
+        </span>
+        <small>入れると、投資額（＝評価額 − 損益）も合わせます</small>
+      </label>
+      <label>口数
+        <span class="input-unit"><input name="qty" type="number" step="any" min="0" inputmode="decimal" required>口</span>
+        <small>積立で増えていたら、PayPay証券の数字に直してください</small>
+      </label>
+      <div class="dlg-actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-close>キャンセル</button>
+        <button type="submit" class="btn primary">保存</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="dlg-buy">
     <form method="dialog" id="form-buy">
       <h2>買付を記録</h2>

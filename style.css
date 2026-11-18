@@ -295,3 +295,10 @@ dialog legend { font-size: 12px; color: var(--text-3); padding: 0 4px; }
 .alert-actions .btn { padding: 8px 18px; font-size: 14px; }
 .deposit-status { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .done-mark { color: var(--text-2); font-weight: 700; }
+
+.alert-sub { font-size: 13px; color: var(--text-2); margin-top: 12px !important; }
+.alert-actions.left { justify-content: flex-start; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.alert-actions.left .btn { padding: 6px 12px; font-size: 13px; }
+.input-unit { display: flex; align-items: center; gap: 6px; }
+.input-unit input { flex: 1; min-width: 0; }
+.input-unit select { flex: none; width: auto; }
