@@ -141,7 +141,26 @@
     return list;
   }
 
+  // GitHub Actions が定期的に取ってきた価格（tools/fetch_quotes.py）。
+  // スマホから株価サイトに直接つながらない分を、これで補う
+  const FEED_URL = (() => {
+    const m = location.hostname.match(/^([\w-]+)\.github\.io$/i);
+    const repo = location.pathname.split('/')[1];
+    return m && repo ? `https://raw.githubusercontent.com/${m[1]}/${repo}/quotes-data/quotes.json` : '';
+  })();
+  let feed = null;
+  async function loadFeed() {
+    if (!FEED_URL) return;
+    try {
+      const j = await fetchJson(FEED_URL + '?t=' + Math.floor(Date.now() / 60000));
+      if (j && j.quotes) feed = j;
+    } catch { /* 前回の feed をそのまま使う */ }
+  }
+
   async function fetchQuote(sym) {
+    const fq = feed && feed.quotes[sym];
+    // 自動取得データが2時間以内なら、それを使う（自分の中継サーバーを設定していればそちらを優先）
+    if (fq && !state.settings.proxy && Date.now() - num(feed.updated) < 2 * 3600e3) return { ...fq };
     let lastErr;
     for (const src of sources(sym)) {
       try {
@@ -150,6 +169,7 @@
         return q;
       } catch (e) { lastErr = e; }
     }
+    if (fq) return { ...fq }; // 古くても、何もないよりは自動取得データを使う
     throw lastErr || new Error('取得できませんでした');
   }
 
@@ -183,6 +203,7 @@
     $('#btn-refresh').classList.add('spinning');
     let failed = 0;
     try {
+      await loadFeed();
       await pool(syms, 4, async (sym) => {
         try {
           const q = await fetchQuote(sym);

@@ -1,0 +1,48 @@
+name: 価格の自動取得
+
+# スマホから株価サイトに直接アクセスできないため、ここで定期的に価格を取って
+# quotes-data ブランチの quotes.json に保存する（保有内容は含まない）
+on:
+  schedule:
+    - cron: '*/15 * * * 1-5'   # 平日 15分ごと（GitHubの混雑で遅れることがある）
+    - cron: '17 */6 * * 0,6'   # 土日 6時間ごと
+  workflow_dispatch:
+  push:
+    branches: [claude/paypay-securities-portfolio-1nwwti]
+    paths: ['tools/**', '.github/workflows/quotes.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: quotes
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 保存先（quotes-data ブランチ）を用意
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir data && cd data && git init -q
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git fetch -q --depth=1 origin quotes-data; then git checkout -q FETCH_HEAD; fi
+          [ -f quotes.json ] || echo '{}' > quotes.json
+
+      - name: 価格を取得
+        run: python3 tools/fetch_quotes.py tools/symbols.txt data/quotes.json data/quotes.json
+
+      - name: 保存（値が変わったときだけ追加で記録）
+        run: |
+          cd data
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add quotes.json
+          if git diff --cached --quiet; then echo '変更なし'; exit 0; fi
+          git commit -q -m '価格データを更新'
+          git push -q origin HEAD:refs/heads/quotes-data
