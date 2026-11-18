@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>かんたん株ポートフォリオ</title>
+  <meta name="description" content="PayPay証券メインの積立・保有株をリアルタイムで確認">
+  <meta name="theme-color" content="#f5f5f2" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#141413" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="株ポートフォリオ">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">株</span>
+      <span class="brand-name">ポートフォリオ</span>
+    </div>
+    <div class="topbar-actions">
+      <button id="btn-refresh" class="icon-btn" title="今すぐ更新" aria-label="今すぐ更新">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.95 7.95 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+      </button>
+      <button id="btn-settings" class="icon-btn" title="設定" aria-label="設定">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94a7.5 7.5 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.3 7.3 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.84a.5.5 0 0 0-.49.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.67 8.48a.5.5 0 0 0 .12.64l2.03 1.58a7.5 7.5 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.12.22.39.3.6.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.05.24.25.42.49.42h3.84c.24 0 .45-.18.49-.42l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.08.48 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <!-- サマリー -->
+    <section class="card hero" aria-live="polite">
+      <div class="hero-label">
+        <span id="scope-label">PayPay証券</span> 評価額
+      </div>
+      <div class="hero-value" id="total-value">—</div>
+      <div class="hero-sub">
+        <div>
+          <div class="k">評価損益</div>
+          <div class="v" id="total-gain">—</div>
+        </div>
+        <div>
+          <div class="k">前日比</div>
+          <div class="v" id="total-day">—</div>
+        </div>
+        <div>
+          <div class="k">投資元本</div>
+          <div class="v" id="total-cost">—</div>
+        </div>
+      </div>
+      <div class="hero-foot">
+        <span id="market-badges" class="badges"></span>
+        <span class="updated"><span id="live-dot" class="dot"></span><span id="updated-at">未更新</span></span>
+      </div>
+      <div class="scope-tabs" role="tablist" aria-label="表示する口座">
+        <button role="tab" data-scope="paypay" class="active">PayPay証券</button>
+        <button role="tab" data-scope="all">すべて</button>
+        <button role="tab" data-scope="sbi">SBI証券</button>
+      </div>
+    </section>
+
+    <!-- 税金 -->
+    <section class="card">
+      <h2>今売ったら（税金の目安）</h2>
+      <div class="tax-grid">
+        <div><div class="k">課税される利益</div><div class="v" id="tax-base">—</div></div>
+        <div><div class="k">税金 (20.315%)</div><div class="v" id="tax-amount">—</div></div>
+        <div><div class="k">税引後の利益</div><div class="v strong" id="tax-net">—</div></div>
+        <div><div class="k">NISAで非課税になった額</div><div class="v" id="tax-saved">—</div></div>
+      </div>
+      <p class="note">特定口座は口座ごとに損益通算、NISAは非課税として計算した概算です。</p>
+    </section>
+
+    <!-- 保有銘柄 -->
+    <section class="card">
+      <div class="card-head">
+        <h2>保有銘柄</h2>
+        <button id="btn-add" class="btn primary">＋ 銘柄を追加</button>
+      </div>
+      <div class="sort-row">
+        <label>並び替え
+          <select id="sort-by">
+            <option value="value">評価額が大きい順</option>
+            <option value="gainPct">損益率が高い順</option>
+            <option value="day">今日の値動き順</option>
+            <option value="name">名前順</option>
+          </select>
+        </label>
+      </div>
+      <div id="holdings" class="holdings"></div>
+      <div id="empty" class="empty" hidden>
+        <p>まだ銘柄がありません。</p>
+        <p>PayPay証券アプリの「保有資産」を見ながら、<br>「＋ 銘柄を追加」で登録してください。</p>
+        <button id="btn-sample" class="btn">サンプルを入れて試す</button>
+      </div>
+    </section>
+
+    <!-- 配分 -->
+    <section class="card" id="alloc-card">
+      <h2>資産の配分</h2>
+      <div id="broker-split"></div>
+      <div id="alloc-bars" class="alloc"></div>
+    </section>
+
+    <!-- 積立 -->
+    <section class="card">
+      <h2>積立のようす</h2>
+      <div class="tax-grid">
+        <div><div class="k">毎月の積立額（目安）</div><div class="v strong" id="monthly-total">—</div></div>
+        <div><div class="k">年間</div><div class="v" id="yearly-total">—</div></div>
+      </div>
+      <ul id="tsumitate-list" class="tsumi-list"></ul>
+      <div class="sim">
+        <h3>将来シミュレーション</h3>
+        <div class="sim-inputs">
+          <label>想定利回り（年）<span><input id="sim-rate" type="number" step="0.5" min="-20" max="30" value="5">%</span></label>
+          <label>期間<span><input id="sim-years" type="number" step="1" min="1" max="50" value="10">年</span></label>
+        </div>
+        <div class="sim-result">
+          <div><div class="k">積み立てた元本</div><div class="v" id="sim-principal">—</div></div>
+          <div><div class="k">予想される資産</div><div class="v strong" id="sim-future">—</div></div>
+        </div>
+        <p class="note">今の評価額＋毎月の積立を、想定利回りで複利運用した場合の目安です（将来を約束するものではありません）。</p>
+      </div>
+    </section>
+
+    <p class="footer-note">
+      株価は Yahoo! Finance 等の公開データを取得しています。日本株は約20分遅れの場合があります。
+      PayPay証券の実際の約定価格（為替・取引コスト込み）とは差が出ます。投資判断はご自身で。
+    </p>
+  </main>
+
+  <!-- 銘柄 追加/編集 -->
+  <dialog id="dlg-holding">
+    <form method="dialog" id="form-holding">
+      <h2 id="dlg-holding-title">銘柄を追加</h2>
+
+      <label>証券会社
+        <select name="broker">
+          <option value="paypay">PayPay証券</option>
+          <option value="sbi">SBI証券</option>
+        </select>
+      </label>
+
+      <label>口座の種類
+        <select name="account">
+          <option value="tokutei">特定口座（課税）</option>
+          <option value="nisa_growth">NISA 成長投資枠</option>
+          <option value="nisa_tsumitate">NISA つみたて投資枠</option>
+          <option value="ippan">一般口座（課税）</option>
+        </select>
+      </label>
+
+      <label>種類
+        <select name="type">
+          <option value="stock">株・ETF（株価を自動取得）</option>
+          <option value="fund">投資信託（基準価額を手入力）</option>
+        </select>
+      </label>
+
+      <label class="for-stock">ティッカー / 証券コード
+        <input name="symbol" placeholder="例: AAPL, VOO, 7203" autocomplete="off" autocapitalize="characters">
+        <small>米国株はティッカー（AAPL）、日本株は4桁コード（7203）でOK</small>
+      </label>
+
+      <label>表示名（任意）
+        <input name="name" placeholder="例: アップル">
+      </label>
+
+      <label><span class="for-stock">保有数量（株）</span><span class="for-fund">保有口数（口）</span>
+        <input name="qty" type="number" step="any" min="0" inputmode="decimal" required>
+        <small class="for-stock">PayPay証券の端数（例: 0.123456株）もそのまま入力</small>
+      </label>
+
+      <label>投資金額の合計（円）
+        <input name="cost" type="number" step="any" min="0" inputmode="decimal" required>
+        <small>アプリの「取得金額」や「投資額」。これまで買った合計額です</small>
+      </label>
+
+      <label class="for-fund">基準価額（1万口あたり・円）
+        <input name="nav" type="number" step="any" min="0" inputmode="decimal">
+      </label>
+
+      <fieldset>
+        <legend>積立設定（任意）</legend>
+        <div class="row2">
+          <label>頻度
+            <select name="freq">
+              <option value="">積立なし</option>
+              <option value="daily">毎日（営業日）</option>
+              <option value="weekly">毎週</option>
+              <option value="monthly">毎月</option>
+            </select>
+          </label>
+          <label>1回の金額（円）
+            <input name="amount" type="number" step="100" min="0" inputmode="numeric">
+          </label>
+        </div>
+      </fieldset>
+
+      <div class="dlg-actions">
+        <button type="button" id="btn-delete" class="btn danger" hidden>削除</button>
+        <span class="spacer"></span>
+        <button type="button" value="cancel" class="btn" data-close>キャンセル</button>
+        <button type="submit" value="ok" class="btn primary">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 買付を記録 -->
+  <dialog id="dlg-buy">
+    <form method="dialog" id="form-buy">
+      <h2>買付を記録</h2>
+      <p class="note" id="buy-target"></p>
+      <label>今回の購入金額（円）
+        <input name="amount" type="number" step="any" min="0" inputmode="decimal" required>
+      </label>
+      <label>今回増えた数量（株・口）
+        <input name="qty" type="number" step="any" min="0" inputmode="decimal" required>
+        <small>積立が約定したら、アプリの約定履歴の数字を入れてください</small>
+      </label>
+      <div class="dlg-actions">
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-close>キャンセル</button>
+        <button type="submit" class="btn primary">追加</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 設定 -->
+  <dialog id="dlg-settings">
+    <form method="dialog" id="form-settings">
+      <h2>設定</h2>
+      <label>自動更新の間隔
+        <select name="refreshSec">
+          <option value="15">15秒</option>
+          <option value="30">30秒</option>
+          <option value="60">1分</option>
+          <option value="300">5分</option>
+          <option value="0">自動更新しない</option>
+        </select>
+      </label>
+      <label>Finnhub APIキー（任意・米国株をより安定して取得）
+        <input name="finnhubKey" autocomplete="off" placeholder="未設定でも動きます">
+        <small>finnhub.io で無料登録すると取得できます</small>
+      </label>
+      <label>自前の中継URL（任意・上級者向け）
+        <input name="proxy" autocomplete="off" placeholder="https://xxx.workers.dev/?url=">
+        <small>README の Cloudflare Worker を使う場合に入力</small>
+      </label>
+      <fieldset>
+        <legend>データのバックアップ</legend>
+        <p class="note">保有データはこの端末のブラウザ内だけに保存されます。機種変更や別の端末で見るときは書き出し→読み込みしてください。</p>
+        <div class="row-btns">
+          <button type="button" id="btn-export" class="btn">書き出す</button>
+          <button type="button" id="btn-import" class="btn">読み込む</button>
+          <input type="file" id="file-import" accept="application/json,.json" hidden>
+        </div>
+      </fieldset>
+      <div class="dlg-actions">
+        <button type="button" id="btn-reset" class="btn danger">全データ削除</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-close>閉じる</button>
+        <button type="submit" class="btn primary">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
