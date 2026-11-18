@@ -20,7 +20,7 @@
   // ---------- 状態 ----------
   const defaultSettings = {
     refreshSec: 30, finnhubKey: '', proxy: '', scope: 'paypay', sort: 'value', simRate: 5, simYears: 10,
-    planBudget: 4000, planMinStock: 1000, planMinFund: 100,
+    planBudget: 4000, planMinStock: 1000, planMinFund: 100, goalAmount: 1000000, goalYears: 10,
   };
   let state = load(STORE_KEY, { holdings: [], settings: { ...defaultSettings } });
   state.settings = { ...defaultSettings, ...(state.settings || {}) };
@@ -336,6 +336,7 @@
     setDelta('#total-gain', gain, costValued > 0 ? gain / costValued : null, valued.length);
     setDelta('#total-day', day, prev > 0 ? day / prev : null, valued.length);
     $('#total-cost').textContent = yen(costAll);
+    renderGoal(value);
 
     // 税
     const tx = taxSummary(rows);
@@ -526,6 +527,100 @@
     $('#market-badges').innerHTML = out.join('');
   }
 
+  // ---------- 目標金額 ----------
+  /** 毎月 pmt 円を積み立て、年利 annualRate で増えるとき、何か月で goal に届くか（届かなければ null） */
+  function monthsToGoal(pv, pmt, goal, annualRate) {
+    if (pv >= goal) return 0;
+    const i = Math.pow(1 + annualRate, 1 / 12) - 1;
+    if (Math.abs(i) < 1e-9) return pmt > 0 ? Math.ceil((goal - pv) / pmt) : null;
+    const a = goal * i + pmt, b = pv * i + pmt;
+    if (b <= 0 || a / b <= 0) return null;
+    const n = Math.log(a / b) / Math.log(1 + i);
+    return Number.isFinite(n) && n > 0 && n < 1200 ? Math.ceil(n) : null;
+  }
+
+  /** months か月で goal に届くために必要な毎月の積立額 */
+  function monthlyNeeded(pv, goal, months, annualRate) {
+    const i = Math.pow(1 + annualRate, 1 / 12) - 1;
+    const grow = Math.pow(1 + i, months);
+    const rest = goal - pv * grow;
+    if (rest <= 0) return 0;
+    return Math.abs(i) < 1e-9 ? rest / months : (rest * i) / (grow - 1);
+  }
+
+  const fmtMonths = (n) => {
+    const y = Math.floor(n / 12), m = n % 12;
+    return y ? `${y}年${m ? m + 'か月' : ''}` : `${m}か月`;
+  };
+  const dateAfter = (n) => {
+    const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + n);
+    return `${d.getFullYear()}年${d.getMonth() + 1}月`;
+  };
+  const ceil100 = (v) => Math.ceil(v / 100) * 100;
+
+  function renderGoal(now) {
+    const st = state.settings;
+    const goal = Math.max(0, num(st.goalAmount));
+    const pmt = Math.max(0, num(st.planBudget));
+    const rate = num(st.simRate) / 100;
+    const years = Math.max(1, Math.round(num(st.goalYears)) || 10);
+    for (const [id, v] of [['#goal-amount', st.goalAmount], ['#goal-monthly', st.planBudget], ['#goal-rate', st.simRate], ['#goal-years', st.goalYears], ['#sim-rate', st.simRate]]) {
+      if (document.activeElement !== $(id)) $(id).value = v;
+    }
+    $('#goal-scope').textContent = $('#scope-label').textContent;
+    $('#goal-now').textContent = yen(now);
+    const p = goal > 0 ? Math.min(1, now / goal) : 0;
+    $('#goal-fill').style.width = (p * 100).toFixed(1) + '%';
+    $('#goal-bar').setAttribute('aria-valuenow', (p * 100).toFixed(0));
+    $('#goal-pct').textContent = goal > 0 ? `${((now / goal) * 100).toFixed(1)}% 達成` : '';
+    $('#goal-left').textContent = goal > 0 ? (goal > now ? `あと ${yen(goal - now)}` : '目標達成！') : '';
+
+    const out = $('#goal-result');
+    if (!goal) { out.innerHTML = ''; return; }
+    if (now >= goal) {
+      out.innerHTML = `<div class="goal-main"><p class="big">目標の${yen(goal)}に届いています 🎉</p><p>次の目標金額を入れてみましょう。</p></div>`;
+      return;
+    }
+    const rl = `年${num(st.simRate)}%`;
+    const nR = monthsToGoal(now, pmt, goal, rate);
+    const n0 = monthsToGoal(now, pmt, goal, 0);
+    const needR = ceil100(monthlyNeeded(now, goal, years * 12, rate));
+    const need0 = ceil100(monthlyNeeded(now, goal, years * 12, 0));
+
+    const pace = nR == null
+      ? `<p class="big">このペースでは届きません</p>`
+      : `<p class="big">約${fmtMonths(nR)}後（${dateAfter(nR)}ごろ）</p>`;
+    const flat = n0 == null ? '届きません' : `約${fmtMonths(n0)}`;
+
+    const cands = [...new Set([pmt, 10000, 20000, 30000, 50000].filter((v) => v > 0))].sort((a, b) => a - b);
+    const rows = cands.map((m) => {
+      const n = monthsToGoal(now, m, goal, rate);
+      return `<tr class="${m === pmt ? 'cur' : ''}"><td>毎月 ${yen(m)}${m === pmt ? '（今）' : ''}</td><td>${n == null ? '—' : '約' + fmtMonths(n)}</td><td>${n == null ? '—' : dateAfter(n)}</td></tr>`;
+    }).join('');
+
+    out.innerHTML = `
+      <div class="goal-main">
+        <div class="k">毎月 ${yen(pmt)}・${rl}で増えた場合、${yen(goal)}に届くのは</div>
+        ${pace}
+        <p class="k">増えも減りもしなかった場合（元本だけ）：${flat}</p>
+      </div>
+      <div class="goal-main">
+        <div class="k">${years}年で${yen(goal)}にするには、毎月</div>
+        <p class="big">約${yen(needR)}<span class="k" style="font-weight:400">（${rl}の場合）</span></p>
+        <p class="k">元本だけで貯めるなら 約${yen(need0)}</p>
+      </div>
+      <table class="goal-table">
+        <thead><tr><th>積立額</th><th>到達まで（${rl}）</th><th>到達時期</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p class="note">利回りは保証されません。株は下がる年もあるので、目安として見てください。届くまでの期間を縮める一番確実な方法は、毎月の積立額を増やすことです。</p>`;
+  }
+
+  ['#goal-amount', '#goal-monthly', '#goal-rate', '#goal-years'].forEach((id) => {
+    const key = { '#goal-amount': 'goalAmount', '#goal-monthly': 'planBudget', '#goal-rate': 'simRate', '#goal-years': 'goalYears' }[id];
+    $(id).addEventListener('input', () => { state.settings[key] = num($(id).value); save(); render(); });
+  });
+
   // ---------- 来月の積立プラン ----------
   /**
    * 予算を100円ずつ、「目標との差（足りない額）」が一番大きい銘柄に配っていく。
@@ -579,7 +674,7 @@
     $('#plan-month').textContent = `${nm.getMonth() + 1}月`;
 
     const st = state.settings;
-    for (const [id, key] of [['#plan-budget', 'planBudget'], ['#plan-min-stock', 'planMinStock'], ['#plan-min-fund', 'planMinFund']]) {
+    for (const [id, key] of [['#plan-min-stock', 'planMinStock'], ['#plan-min-fund', 'planMinFund']]) {
       if (document.activeElement !== $(id)) $(id).value = st[key];
     }
 
@@ -593,6 +688,7 @@
     const minStock = Math.max(100, Math.round(num(st.planMinStock) / 100) * 100 || 1000);
     const minFund = Math.max(100, Math.round(num(st.planMinFund) / 100) * 100 || 100);
     const plan = computePlan(items, budget, minStock, minFund);
+    $('#plan-budget-label').textContent = yen(budget);
 
     // 入力中にフォーカスが外れないよう、銘柄が変わったときだけ表を作り直す
     const table = $('#plan-table');
@@ -657,7 +753,7 @@
     h.target = Math.max(0, Math.min(100, num(e.target.value)));
     save(); render();
   });
-  [['#plan-budget', 'planBudget'], ['#plan-min-stock', 'planMinStock'], ['#plan-min-fund', 'planMinFund']].forEach(([id, key]) =>
+  [['#plan-min-stock', 'planMinStock'], ['#plan-min-fund', 'planMinFund']].forEach(([id, key]) =>
     $(id).addEventListener('input', () => { state.settings[key] = num($(id).value); save(); render(); }));
   $('#plan-preset-current').addEventListener('click', () => {
     const rows = planRows();

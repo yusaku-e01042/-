@@ -62,6 +62,29 @@
       </div>
     </section>
 
+    <!-- 目標金額 -->
+    <section class="card" id="goal-card">
+      <h2>目標まで</h2>
+      <div class="goal-head">
+        <div>
+          <div class="k">今（<span id="goal-scope">PayPay証券</span>）</div>
+          <div class="v strong" id="goal-now">—</div>
+        </div>
+        <label class="goal-target">目標
+          <span><input id="goal-amount" type="number" step="10000" min="0" inputmode="numeric">円</span>
+        </label>
+      </div>
+      <div class="goal-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="goal-bar"><span id="goal-fill"></span></div>
+      <div class="goal-pct"><span id="goal-pct">—</span><span id="goal-left"></span></div>
+
+      <div class="sim-inputs" style="margin-top:14px">
+        <label>毎月の積立<span><input id="goal-monthly" type="number" step="1000" min="0" inputmode="numeric">円</span></label>
+        <label>想定利回り（年）<span><input id="goal-rate" type="number" step="0.5" min="-20" max="30">%</span></label>
+        <label>何年で達成したい？<span><input id="goal-years" type="number" step="1" min="1" max="50" inputmode="numeric">年</span></label>
+      </div>
+      <div id="goal-result"></div>
+    </section>
+
     <!-- 税金 -->
     <section class="card">
       <h2>今売ったら（税金の目安）</h2>
@@ -129,20 +152,22 @@
 
     <!-- 来月の積立プラン -->
     <section class="card" id="plan-card">
-      <h2><span id="plan-month">来月</span>の積立プラン（PayPay証券）</h2>
-      <p class="note" style="margin:0 0 12px">決めた「目標の割合」に近づくように、予算の分け方を計算します。値上がりの予想ではありません。</p>
-      <div class="sim-inputs">
-        <label>毎月の予算<span><input id="plan-budget" type="number" step="100" min="0" inputmode="numeric">円</span></label>
-        <label>株・ETFの最低額<span><input id="plan-min-stock" type="number" step="100" min="100" inputmode="numeric">円</span></label>
-        <label>投資信託の最低額<span><input id="plan-min-fund" type="number" step="100" min="100" inputmode="numeric">円</span></label>
-      </div>
-      <div class="row-btns" style="margin:12px 0 4px">
-        <span class="k" style="align-self:center">目標の割合：</span>
-        <button type="button" class="btn small" id="plan-preset-current">今の割合にする</button>
-        <button type="button" class="btn small" id="plan-preset-equal">均等にする</button>
-      </div>
-      <div id="plan-table"></div>
+      <h2><span id="plan-month">来月</span>の積立の分け方（PayPay証券）</h2>
+      <p class="note" style="margin:0 0 4px">毎月 <strong id="plan-budget-label">—</strong> を、今の割合をくずさないように銘柄ごとに分けます（金額は上の「目標まで」で変更）。値上がりの予想ではありません。</p>
       <div id="plan-result"></div>
+      <details class="plan-details">
+        <summary>銘柄ごとの割合を調整する（任意）</summary>
+        <div class="sim-inputs" style="margin-top:10px">
+          <label>株・ETFの最低額<span><input id="plan-min-stock" type="number" step="100" min="100" inputmode="numeric">円</span></label>
+          <label>投資信託の最低額<span><input id="plan-min-fund" type="number" step="100" min="100" inputmode="numeric">円</span></label>
+        </div>
+        <div class="row-btns" style="margin:12px 0 4px">
+          <span class="k" style="align-self:center">目標の割合：</span>
+          <button type="button" class="btn small" id="plan-preset-current">今の割合にする</button>
+          <button type="button" class="btn small" id="plan-preset-equal">均等にする</button>
+        </div>
+        <div id="plan-table"></div>
+      </details>
     </section>
 
     <p class="footer-note">
