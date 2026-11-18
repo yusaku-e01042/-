@@ -1,9 +1,0 @@
-# GitHub Actions が自動で価格を取ってくる銘柄（1行に1つ。Yahoo Financeの記号）
-# 投資信託の「値動きの連動先」と為替。株を持ったら、その銘柄（例: 7203.T、VOO）を足す
-1540.T     # 純金上場信託（三菱UFJ純金ファンドなどの連動先）
-GC=F       # 金先物
-1306.T     # TOPIX連動ETF
-VOO        # S&P500
-VT         # 全世界株
-QQQ        # NASDAQ100
-USDJPY=X   # ドル円
