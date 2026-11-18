@@ -4,6 +4,30 @@
 (() => {
   'use strict';
 
+  // ---------- 版数チェック ----------
+  // 画面（index.html）とプログラム（app.js）は別々にキャッシュされるため、
+  // 古い画面に新しいプログラムが当たると途中で止まって何も表示されなくなる。
+  // 版数が違ったら、キャッシュを通さずに1回だけ読み込み直す。
+  // ※更新するときは、ここと index.html の app-version・?v= をそろえて上げる
+  const APP_VERSION = '9';
+  const pageVersion = (document.querySelector('meta[name="app-version"]') || {}).content;
+  if (pageVersion !== APP_VERSION) {
+    let tried = null;
+    try { tried = sessionStorage.getItem('kabu-reload'); sessionStorage.setItem('kabu-reload', APP_VERSION); } catch { /* 使えなくても続ける */ }
+    if (tried !== APP_VERSION) {
+      location.replace(location.pathname + '?v=' + Date.now() + location.hash);
+      return;
+    }
+    // 読み込み直しても古いまま（GitHubのキャッシュが残っている）→ 止まる代わりに案内を出す
+    const n = document.createElement('p');
+    n.style.cssText = 'margin:12px;padding:12px;border-radius:12px;background:#fff3cd;color:#5c4400;font-size:14px';
+    n.textContent = '新しい版に更新中です。数分後にアプリを閉じて開き直してください（保存したデータは消えていません）。';
+    document.body.prepend(n);
+    return;
+  } else if (/[?&]v=\d/.test(location.search)) {
+    history.replaceState(null, '', location.pathname + location.hash); // URLの ?v= は消しておく
+  }
+
   // ---------- 定数 ----------
   const STORE_KEY = 'kabu-portfolio-v1';
   const QUOTE_KEY = 'kabu-quotes-v1';
