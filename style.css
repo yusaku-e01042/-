@@ -273,3 +273,13 @@ dialog legend { font-size: 12px; color: var(--text-3); padding: 0 4px; }
 .goal-table tr.cur td { font-weight: 700; }
 .plan-details { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
 .plan-details summary { cursor: pointer; font-size: 13px; color: var(--text-2); }
+
+/* 入金日 */
+.deposit { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px; border-radius: 12px; background: var(--surface-2); }
+.deposit.today { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+.deposit-days { font-weight: 800; font-size: 15px; white-space: nowrap; }
+.deposit.today .deposit-days { color: var(--accent); }
+.deposit-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.deposit-day { font-size: 12px; color: var(--text-3); display: grid; gap: 4px; }
+.deposit-day span { display: flex; align-items: center; gap: 4px; color: var(--text-2); }
+.deposit-day input { width: 3.4em; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); text-align: right; font-size: 16px; }

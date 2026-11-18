@@ -20,7 +20,7 @@
   // ---------- 状態 ----------
   const defaultSettings = {
     refreshSec: 30, finnhubKey: '', proxy: '', scope: 'paypay', sort: 'value', simRate: 5, simYears: 10,
-    planBudget: 4000, planMinStock: 1000, planMinFund: 100, goalAmount: 1000000, goalYears: 10,
+    planBudget: 4000, planMinStock: 1000, planMinFund: 100, goalAmount: 1000000, goalYears: 10, depositDay: 1,
   };
   let state = load(STORE_KEY, { holdings: [], settings: { ...defaultSettings } });
   state.settings = { ...defaultSettings, ...(state.settings || {}) };
@@ -623,6 +623,77 @@
     $(id).addEventListener('input', () => { state.settings[key] = num($(id).value); save(); render(); });
   });
 
+  // ---------- 入金日 ----------
+  const WEEKDAY = '日月火水木金土';
+  const fmtDate = (d) => `${d.getMonth() + 1}月${d.getDate()}日（${WEEKDAY[d.getDay()]}）`;
+  const depositDayOf = () => Math.min(28, Math.max(1, Math.round(num(state.settings.depositDay)) || 1));
+
+  /** 次の入金日（今日が入金日なら今日） */
+  function nextDeposit() {
+    const day = depositDayOf();
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    let d = new Date(today.getFullYear(), today.getMonth(), day);
+    if (d < today) d = new Date(today.getFullYear(), today.getMonth() + 1, day);
+    return { d, day, days: Math.round((d - today) / 86400000) };
+  }
+
+  function renderDeposit() {
+    const nd = nextDeposit();
+    if (document.activeElement !== $('#deposit-day')) $('#deposit-day').value = nd.day;
+    $('#deposit-next').textContent = fmtDate(nd.d);
+    $('#deposit-days').textContent = nd.days === 0 ? '今日です！' : nd.days === 1 ? '明日' : `あと${nd.days}日`;
+    $('#deposit-box').classList.toggle('today', nd.days <= 1);
+    return nd;
+  }
+
+  $('#deposit-day').addEventListener('input', () => {
+    const v = Math.round(num($('#deposit-day').value));
+    if (v >= 1 && v <= 28) { state.settings.depositDay = v; save(); render(); }
+  });
+
+  /** 毎月の入金日に通知が出る、繰り返しのカレンダー予定（.ics）を作る */
+  function buildCalendar() {
+    const nd = nextDeposit();
+    const pad = (n) => String(n).padStart(2, '0');
+    const ymd = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+    const end = new Date(nd.d); end.setDate(end.getDate() + 1);
+    const icsText = (t) => String(t).replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/([,;])/g, '\\$1');
+    const appUrl = location.origin + location.pathname;
+    const budget = yen(Math.max(0, num(state.settings.planBudget)));
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+    const lines = [
+      'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//kabu-portfolio//JA', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+      'BEGIN:VEVENT',
+      `UID:kabu-deposit-${uid()}@kabu-portfolio`,
+      `DTSTAMP:${stamp}`,
+      `DTSTART;VALUE=DATE:${ymd(nd.d)}`,
+      `DTEND;VALUE=DATE:${ymd(end)}`,
+      `RRULE:FREQ=MONTHLY;BYMONTHDAY=${nd.day}`,
+      `SUMMARY:${icsText(`積立の入金日（PayPay証券 ${budget}）`)}`,
+      `DESCRIPTION:${icsText(`今月 ${budget} を入金する日です。\n何をいくら買うかはアプリで確認：${appUrl}`)}`,
+      `URL:${appUrl}`,
+      'BEGIN:VALARM', 'ACTION:DISPLAY', 'TRIGGER:PT9H', `DESCRIPTION:${icsText(`積立の入金日です（${budget}）`)}`, 'END:VALARM',
+      'END:VEVENT', 'END:VCALENDAR',
+    ];
+    return lines.join('\r\n') + '\r\n';
+  }
+
+  $('#btn-calendar').addEventListener('click', () => {
+    const ics = buildCalendar();
+    if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+      // iPhoneはこれでカレンダーの「追加」画面が開く
+      location.href = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
+      return;
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }));
+    a.download = 'tsumitate-reminder.ics';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast('カレンダー用ファイルを保存しました。開くとカレンダーに追加できます');
+  });
+
   // ---------- 来月の積立プラン ----------
   /**
    * 予算を100円ずつ、「目標との差（足りない額）」が一番大きい銘柄に配っていく。
@@ -672,8 +743,7 @@
     const card = $('#plan-card');
     card.hidden = rows.length === 0;
     if (!rows.length) return;
-    const nm = new Date(); nm.setDate(1); nm.setMonth(nm.getMonth() + 1);
-    $('#plan-month').textContent = `${nm.getMonth() + 1}月`;
+    const nd = renderDeposit();
 
     const st = state.settings;
     for (const [id, key] of [['#plan-min-stock', 'planMinStock'], ['#plan-min-fund', 'planMinFund']]) {
@@ -733,8 +803,8 @@
       .filter((b) => b.a > 0).sort((a, b) => b.a - a.a);
     $('#plan-result').innerHTML = buys.length ? `
       <div class="plan-summary">
-        <strong>${nm.getMonth() + 1}月はこう買うと目標に近づきます</strong>
-        <ol>${buys.map((b) => `<li>${esc(b.x.name)}：<strong>${yen(b.a)}</strong>（買った後 約${b.after.toFixed(0)}%／目標 ${b.x.target}%）</li>`).join('')}</ol>
+        <strong>${nd.days === 0 ? '今日' : fmtDate(nd.d) + 'に'}買うもの</strong>
+        <ol>${buys.map((b) => `<li>${esc(b.x.name)}：<strong>${yen(b.a)}</strong>${items.length > 1 ? `（買った後 約${b.after.toFixed(0)}%／目標 ${b.x.target}%）` : ''}</li>`).join('')}</ol>
         ${plan.leftover > 0 ? `<div class="k" style="margin-top:6px">最低購入額の都合で ${yen(plan.leftover)} 余ります</div>` : ''}
       </div>
       <div class="plan-actions"><button type="button" class="btn small" id="plan-apply">この金額を積立設定に反映</button></div>
