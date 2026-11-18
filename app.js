@@ -9,7 +9,7 @@
   // 古い画面に新しいプログラムが当たると途中で止まって何も表示されなくなる。
   // 版数が違ったら、キャッシュを通さずに1回だけ読み込み直す。
   // ※更新するときは、ここと index.html の app-version・?v= をそろえて上げる
-  const APP_VERSION = '9';
+  const APP_VERSION = '10';
   const pageVersion = (document.querySelector('meta[name="app-version"]') || {}).content;
   if (pageVersion !== APP_VERSION) {
     let tried = null;
@@ -44,7 +44,7 @@
   // ---------- 状態 ----------
   const defaultSettings = {
     refreshSec: 30, finnhubKey: '', proxy: '', scope: 'paypay', sort: 'value', simRate: 5, simYears: 10,
-    planBudget: 4000, planMinStock: 1000, planMinFund: 100, goalAmount: 1000000, goalYears: 10, depositDay: 1, depositDone: '',
+    planBudget: 4000, planMinStock: 1000, planMinFund: 100, goalAmount: 1000000, goalYears: 10, depositDay: 1, depositDone: '', planMode: 'fixed',
   };
   let state = load(STORE_KEY, { holdings: [], settings: { ...defaultSettings } });
   state.settings = { ...defaultSettings, ...(state.settings || {}) };
@@ -433,7 +433,8 @@
         fundNote = r.estNav != null
           ? `<div class="k">${age == null ? '入力した' : navDateLabel(h) + 'の'}基準価額をもとに、${esc(h.proxy)} の値動きで推定中</div>`
           : `<div class="k">${age == null ? '手入力の' : age === 0 ? '今日入れた' : navDateLabel(h) + 'に入れた'}評価額で表示中</div>`;
-        if (age == null || age >= 7) fundNote += `<div class="h-err">${age == null ? 'いつの金額か分かりません。' : `${age}日間更新していません。`}PayPay証券の評価額を入れてください</div>`;
+        if (!(num(h.qty) > 0)) fundNote = '<div class="k">まだ買っていません。最初の積立が約定したら「評価額を入れる」で入れてください</div>';
+        else if (age == null || age >= 7) fundNote += `<div class="h-err">${age == null ? 'いつの金額か分かりません。' : `${age}日間更新していません。`}PayPay証券の評価額を入れてください</div>`;
       }
       return `
         <article class="h-item" data-id="${h.id}">
@@ -718,7 +719,7 @@
   }
 
   /** PayPay証券の投資信託で、今日まだ評価額を入れていないもの */
-  const staleFunds = () => state.holdings.filter((h) => h.broker === 'paypay' && h.type === 'fund' && navAgeDays(h) !== 0);
+  const staleFunds = () => state.holdings.filter((h) => h.broker === 'paypay' && h.type === 'fund' && num(h.qty) > 0 && navAgeDays(h) !== 0);
 
   $('#deposit-alert').addEventListener('click', (e) => {
     const v = e.target.closest('[data-act="value"]');
@@ -805,7 +806,15 @@
     const minStock = Math.max(100, Math.round(num(st.planMinStock) / 100) * 100 || 1000);
     const minFund = Math.max(100, Math.round(num(st.planMinFund) / 100) * 100 || 100);
     const plan = computePlan(items, budget, minStock, minFund);
-    $('#plan-budget-label').textContent = yen(budget);
+
+    // 買い方：積立設定の金額どおり（fixed）か、目標の割合に近づける（rebalance）か
+    const fixedBuys = items.map((x) => ({ x, a: Math.round(monthlyOf(x.h)) })).filter((b) => b.a > 0).sort((a, b) => b.a - a.a);
+    const mode = st.planMode === 'rebalance' || !fixedBuys.length ? 'rebalance' : 'fixed';
+    $$('input[name="plan-mode"]').forEach((el) => { el.checked = el.value === mode; el.disabled = el.value === 'fixed' && !fixedBuys.length; });
+    const fixedSum = fixedBuys.reduce((a, b) => a + b.a, 0);
+    $('#plan-note').innerHTML = mode === 'fixed'
+      ? `PayPay証券の積立設定の金額です（合計 <strong>${yen(fixedSum)}</strong>）。金額を変えるときは、保有銘柄の「編集」→ 積立 で変更してください。`
+      : `毎月 <strong>${yen(budget)}</strong> を、目標の割合に近づくように銘柄ごとに分けた目安です（金額は上の「目標まで」で変更）。値上がりの予想ではありません。`;
 
     // 入力中にフォーカスが外れないよう、銘柄が変わったときだけ表を作り直す
     const table = $('#plan-table');
@@ -844,6 +853,16 @@
       ? `目標の合計が${Math.round(plan.tsum)}%です。100%になる割合に直して計算しています。`
       : '目標の割合を入れてください。';
 
+    if (mode === 'fixed') {
+      renderDepositAlert(nd, fixedBuys, fixedSum);
+      $('#plan-result').innerHTML = `
+        <div class="plan-summary">
+          <strong>${nd.days === 0 ? '今日' : fmtDate(nd.d) + 'に'}買うもの（合計 ${yen(fixedSum)}）</strong>
+          <ol>${fixedBuys.map((b) => `<li>${esc(b.x.name)}：<strong>${yen(b.a)}</strong>${b.x.h.account.startsWith('nisa') ? `<span class="k">（${ACCOUNT_LABEL[b.x.h.account]}）</span>` : ''}</li>`).join('')}</ol>
+          ${fixedSum !== budget ? `<div class="k" style="margin-top:6px">「目標まで」の毎月の積立（${yen(budget)}）と合計が違います</div>` : ''}
+        </div>`;
+      return;
+    }
     const buys = items.map((x, i) => ({ x, a: plan.alloc[i], after: plan.after[i] }))
       .filter((b) => b.a > 0).sort((a, b) => b.a - a.a);
     renderDepositAlert(nd, buys, budget);
@@ -858,6 +877,9 @@
       : `<div class="plan-summary">予算が最低購入額より少ないため、プランを作れません。</div>`;
   }
 
+  $$('input[name="plan-mode"]').forEach((el) => el.addEventListener('change', () => {
+    state.settings.planMode = el.value; save(); render();
+  }));
   $('#plan-table').addEventListener('input', (e) => {
     const tr = e.target.closest('tr[data-id]');
     if (!tr) return;

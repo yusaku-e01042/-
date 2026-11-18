@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta name="app-version" content="9">
+  <meta name="app-version" content="10">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>かんたん株ポートフォリオ</title>
   <meta name="description" content="PayPay証券メインの積立・保有株をリアルタイムで確認">
@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon.svg">
-  <link rel="stylesheet" href="style.css?v=9">
+  <link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
   <header class="topbar">
@@ -75,9 +75,13 @@
         <div class="deposit-status" id="deposit-status"></div>
       </div>
       <div id="plan-result"></div>
-      <p class="note">毎月 <strong id="plan-budget-label">—</strong> を、今の割合をくずさないように銘柄ごとに分けた目安です（金額は上の「目標まで」で変更）。値上がりの予想ではありません。</p>
+      <p class="note" id="plan-note"></p>
       <details class="plan-details">
-        <summary>銘柄ごとの割合を調整する（任意）</summary>
+        <summary>買い方を変える（任意）</summary>
+        <div class="plan-mode" role="radiogroup" aria-label="買い方">
+          <label><input type="radio" name="plan-mode" value="fixed"> 積立設定の金額で買う<small>銘柄ごとに決めた金額（例：オルカン3,000円・金1,000円）</small></label>
+          <label><input type="radio" name="plan-mode" value="rebalance"> 目標の割合に近づくように分ける<small>「目標まで」の毎月の積立を、下の割合に合わせて自動で分ける</small></label>
+        </div>
         <div class="sim-inputs" style="margin-top:10px">
           <label>株・ETFの最低額<span><input id="plan-min-stock" type="number" step="100" min="100" inputmode="numeric">円</span></label>
           <label>投資信託の最低額<span><input id="plan-min-fund" type="number" step="100" min="100" inputmode="numeric">円</span></label>
@@ -386,6 +390,6 @@
 
   <div id="toast" class="toast" role="status" hidden></div>
 
-  <script src="app.js?v=9"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>

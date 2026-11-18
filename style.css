@@ -308,3 +308,8 @@ dialog legend { font-size: 12px; color: var(--text-3); padding: 0 4px; }
 .link-import { display: flex; gap: 8px; margin-top: 10px; }
 .link-import input { flex: 1; min-width: 0; }
 #btn-link-paste { width: 100%; }
+
+.plan-mode { display: grid; gap: 8px; margin: 10px 0 14px; }
+.plan-mode label { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: start; font-size: 14px; font-weight: 600; }
+.plan-mode input { margin-top: 3px; }
+.plan-mode small { grid-column: 2; font-weight: 400; color: var(--text-3); font-size: 12px; }
