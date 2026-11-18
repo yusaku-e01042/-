@@ -127,6 +127,24 @@
       </div>
     </section>
 
+    <!-- 来月の積立プラン -->
+    <section class="card" id="plan-card">
+      <h2><span id="plan-month">来月</span>の積立プラン（PayPay証券）</h2>
+      <p class="note" style="margin:0 0 12px">決めた「目標の割合」に近づくように、予算の分け方を計算します。値上がりの予想ではありません。</p>
+      <div class="sim-inputs">
+        <label>毎月の予算<span><input id="plan-budget" type="number" step="100" min="0" inputmode="numeric">円</span></label>
+        <label>株・ETFの最低額<span><input id="plan-min-stock" type="number" step="100" min="100" inputmode="numeric">円</span></label>
+        <label>投資信託の最低額<span><input id="plan-min-fund" type="number" step="100" min="100" inputmode="numeric">円</span></label>
+      </div>
+      <div class="row-btns" style="margin:12px 0 4px">
+        <span class="k" style="align-self:center">目標の割合：</span>
+        <button type="button" class="btn small" id="plan-preset-current">今の割合にする</button>
+        <button type="button" class="btn small" id="plan-preset-equal">均等にする</button>
+      </div>
+      <div id="plan-table"></div>
+      <div id="plan-result"></div>
+    </section>
+
     <p class="footer-note">
       株価は Yahoo! Finance 等の公開データを取得しています。日本株は約20分遅れの場合があります。
       PayPay証券の実際の約定価格（為替・取引コスト込み）とは差が出ます。投資判断はご自身で。

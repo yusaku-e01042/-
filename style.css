@@ -234,3 +234,23 @@ dialog legend { font-size: 12px; color: var(--text-3); padding: 0 4px; }
   .h-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .alloc-row { grid-template-columns: 10em minmax(0, 1fr) 4em; }
 }
+
+/* 来月の積立プラン */
+.plan-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; table-layout: fixed; }
+.plan-table th { font-size: 11px; font-weight: 500; color: var(--text-3); text-align: right; padding: 4px 2px; }
+.plan-table th:first-child, .plan-table td:first-child { text-align: left; }
+.plan-table td { white-space: nowrap; padding: 8px 2px; border-top: 1px dashed var(--border); text-align: right; font-variant-numeric: tabular-nums; vertical-align: middle; }
+.plan-table td:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plan-table col.c-name { width: auto; }
+.plan-table col.c-now { width: 3.6em; }
+.plan-table col.c-target { width: 5.8em; }
+.plan-table col.c-buy { width: 5.6em; }
+.plan-table input { width: 3.4em; padding: 4px 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); text-align: right; font-size: 16px; }
+.plan-table .buy { font-weight: 700; }
+.plan-table .zero { color: var(--text-3); font-weight: 400; }
+.plan-table tfoot td { font-weight: 700; border-top: 1px solid var(--border); }
+.plan-warn { font-size: 12px; color: #b26b00; margin: 8px 0 0; }
+.plan-summary { margin-top: 12px; padding: 12px; border-radius: 12px; background: var(--surface-2); font-size: 13.5px; }
+.plan-summary ol { margin: 6px 0 0; padding-left: 1.4em; }
+.plan-summary li { margin: 2px 0; }
+.plan-actions { display: flex; justify-content: flex-end; margin-top: 10px; }

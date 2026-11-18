@@ -18,7 +18,10 @@
   const PER_MONTH = { daily: 245 / 12, weekly: 52 / 12, monthly: 1 }; // 営業日≒年245日
 
   // ---------- 状態 ----------
-  const defaultSettings = { refreshSec: 30, finnhubKey: '', proxy: '', scope: 'paypay', sort: 'value', simRate: 5, simYears: 10 };
+  const defaultSettings = {
+    refreshSec: 30, finnhubKey: '', proxy: '', scope: 'paypay', sort: 'value', simRate: 5, simYears: 10,
+    planBudget: 4000, planMinStock: 1000, planMinFund: 100,
+  };
   let state = load(STORE_KEY, { holdings: [], settings: { ...defaultSettings } });
   state.settings = { ...defaultSettings, ...(state.settings || {}) };
   if (!Array.isArray(state.holdings)) state.holdings = [];
@@ -344,6 +347,7 @@
     renderHoldings(rows);
     renderAlloc(all, rows);
     renderTsumitate(rows, value);
+    renderPlan(all);
     renderMarkets();
 
     const times = rows.map((r) => r.q && r.q.fetchedAt).filter(Boolean);
@@ -522,6 +526,167 @@
     $('#market-badges').innerHTML = out.join('');
   }
 
+  // ---------- 来月の積立プラン ----------
+  /**
+   * 予算を100円ずつ、「目標との差（足りない額）」が一番大きい銘柄に配っていく。
+   * まだ0円の銘柄に配るときは、最低購入額をまとめて配る。
+   */
+  function computePlan(items, budget, minStock, minFund) {
+    const STEP = 100;
+    const tsum = items.reduce((a, x) => a + Math.max(0, x.target), 0);
+    const w = items.map((x) => (tsum > 0 ? Math.max(0, x.target) / tsum : 0));
+    const total = items.reduce((a, x) => a + x.value, 0) + budget;
+    const alloc = items.map(() => 0);
+    const minOf = (x) => (x.type === 'fund' ? minFund : minStock);
+    let remaining = Math.floor(budget / STEP) * STEP;
+    while (remaining >= STEP) {
+      let best = -1, bestDef = -Infinity;
+      items.forEach((x, i) => {
+        if (w[i] <= 0) return;
+        const inc = alloc[i] === 0 ? minOf(x) : STEP;
+        if (inc > remaining) return;
+        const def = w[i] * total - (x.value + alloc[i]);
+        if (def > bestDef) { bestDef = def; best = i; }
+      });
+      if (best < 0) break;
+      const inc = alloc[best] === 0 ? minOf(items[best]) : STEP;
+      alloc[best] += inc;
+      remaining -= inc;
+    }
+    const used = alloc.reduce((a, v) => a + v, 0);
+    return { alloc, leftover: budget - used, tsum, after: items.map((x, i) => ((x.value + alloc[i]) / total) * 100) };
+  }
+
+  /** 合計がぴったり100になるよう整数に丸める */
+  function roundTo100(vals) {
+    const fl = vals.map(Math.floor);
+    let rest = 100 - fl.reduce((a, v) => a + v, 0);
+    const order = vals.map((v, i) => [v - Math.floor(v), i]).sort((a, b) => b[0] - a[0]);
+    for (let k = 0; rest > 0 && order.length; k = (k + 1) % order.length, rest--) fl[order[k][1]]++;
+    return fl;
+  }
+
+  function planRows() {
+    return state.holdings.map(evaluate).filter((r) => r.h.broker === 'paypay');
+  }
+
+  function renderPlan(all) {
+    const rows = all.filter((r) => r.h.broker === 'paypay');
+    const card = $('#plan-card');
+    card.hidden = rows.length === 0;
+    if (!rows.length) return;
+    const nm = new Date(); nm.setDate(1); nm.setMonth(nm.getMonth() + 1);
+    $('#plan-month').textContent = `${nm.getMonth() + 1}月`;
+
+    const st = state.settings;
+    for (const [id, key] of [['#plan-budget', 'planBudget'], ['#plan-min-stock', 'planMinStock'], ['#plan-min-fund', 'planMinFund']]) {
+      if (document.activeElement !== $(id)) $(id).value = st[key];
+    }
+
+    const items = rows.map((r) => ({ id: r.h.id, h: r.h, name: displayName(r.h, r.q), type: r.h.type, value: r.value ?? r.cost }));
+    const totalNow = items.reduce((a, x) => a + x.value, 0);
+    const nowPct = items.map((x) => (totalNow > 0 ? (x.value / totalNow) * 100 : 100 / items.length));
+    const fallback = roundTo100(nowPct);
+    items.forEach((x, i) => { x.nowPct = nowPct[i]; x.target = Number.isFinite(x.h.target) ? x.h.target : fallback[i]; });
+
+    const budget = Math.max(0, num(st.planBudget));
+    const minStock = Math.max(100, Math.round(num(st.planMinStock) / 100) * 100 || 1000);
+    const minFund = Math.max(100, Math.round(num(st.planMinFund) / 100) * 100 || 100);
+    const plan = computePlan(items, budget, minStock, minFund);
+
+    // 入力中にフォーカスが外れないよう、銘柄が変わったときだけ表を作り直す
+    const table = $('#plan-table');
+    const key = items.map((x) => x.id + ':' + x.name).join('|');
+    if (table.dataset.key !== key) {
+      table.dataset.key = key;
+      table.innerHTML = `
+        <table class="plan-table">
+          <colgroup><col class="c-name"><col class="c-now"><col class="c-target"><col class="c-buy"></colgroup>
+          <thead><tr><th>銘柄</th><th>今</th><th>目標</th><th>来月買う額</th></tr></thead>
+          <tbody>${items.map((x) => `
+            <tr data-id="${x.id}">
+              <td title="${esc(x.name)}">${esc(x.name)}</td>
+              <td class="now"></td>
+              <td><input type="number" min="0" max="100" step="1" inputmode="numeric" aria-label="${esc(x.name)}の目標%">%</td>
+              <td class="buy"></td>
+            </tr>`).join('')}</tbody>
+          <tfoot><tr><td>合計</td><td>100%</td><td class="tsum"></td><td class="bsum"></td></tr></tfoot>
+        </table>
+        <p class="plan-warn" hidden></p>`;
+    }
+    items.forEach((x, i) => {
+      const tr = table.querySelector(`tr[data-id="${x.id}"]`);
+      tr.querySelector('.now').textContent = x.nowPct.toFixed(0) + '%';
+      const inp = tr.querySelector('input');
+      if (document.activeElement !== inp) inp.value = x.target;
+      const b = tr.querySelector('.buy');
+      b.textContent = plan.alloc[i] ? yen(plan.alloc[i]) : '0円';
+      b.classList.toggle('zero', !plan.alloc[i]);
+    });
+    table.querySelector('.tsum').textContent = `${Math.round(plan.tsum)}%`;
+    table.querySelector('.bsum').textContent = yen(budget - plan.leftover);
+    const warn = table.querySelector('.plan-warn');
+    warn.hidden = Math.round(plan.tsum) === 100;
+    warn.textContent = plan.tsum > 0
+      ? `目標の合計が${Math.round(plan.tsum)}%です。100%になる割合に直して計算しています。`
+      : '目標の割合を入れてください。';
+
+    const buys = items.map((x, i) => ({ x, a: plan.alloc[i], after: plan.after[i] }))
+      .filter((b) => b.a > 0).sort((a, b) => b.a - a.a);
+    $('#plan-result').innerHTML = buys.length ? `
+      <div class="plan-summary">
+        <strong>${nm.getMonth() + 1}月はこう買うと目標に近づきます</strong>
+        <ol>${buys.map((b) => `<li>${esc(b.x.name)}：<strong>${yen(b.a)}</strong>（買った後 約${b.after.toFixed(0)}%／目標 ${b.x.target}%）</li>`).join('')}</ol>
+        ${plan.leftover > 0 ? `<div class="k" style="margin-top:6px">最低購入額の都合で ${yen(plan.leftover)} 余ります</div>` : ''}
+      </div>
+      <div class="plan-actions"><button type="button" class="btn small" id="plan-apply">この金額を積立設定に反映</button></div>
+      <p class="note">目標から大きくずれている場合、1か月では目標に届かないこともあります。毎月続けると少しずつ近づきます。</p>`
+      : `<div class="plan-summary">予算が最低購入額より少ないため、プランを作れません。</div>`;
+  }
+
+  $('#plan-table').addEventListener('input', (e) => {
+    const tr = e.target.closest('tr[data-id]');
+    if (!tr) return;
+    const h = state.holdings.find((x) => x.id === tr.dataset.id);
+    if (!h) return;
+    // 初めて触ったときは、他の銘柄も今表示中の目標で固定する
+    for (const row of $$('#plan-table tr[data-id]')) {
+      const hh = state.holdings.find((x) => x.id === row.dataset.id);
+      if (hh && !Number.isFinite(hh.target)) hh.target = num(row.querySelector('input').value);
+    }
+    h.target = Math.max(0, Math.min(100, num(e.target.value)));
+    save(); render();
+  });
+  [['#plan-budget', 'planBudget'], ['#plan-min-stock', 'planMinStock'], ['#plan-min-fund', 'planMinFund']].forEach(([id, key]) =>
+    $(id).addEventListener('input', () => { state.settings[key] = num($(id).value); save(); render(); }));
+  $('#plan-preset-current').addEventListener('click', () => {
+    const rows = planRows();
+    const tot = rows.reduce((a, r) => a + (r.value ?? r.cost), 0);
+    const t = roundTo100(rows.map((r) => (tot > 0 ? ((r.value ?? r.cost) / tot) * 100 : 100 / rows.length)));
+    rows.forEach((r, i) => (r.h.target = t[i]));
+    save(); render();
+  });
+  $('#plan-preset-equal').addEventListener('click', () => {
+    const rows = planRows();
+    const t = roundTo100(rows.map(() => 100 / rows.length));
+    rows.forEach((r, i) => (r.h.target = t[i]));
+    save(); render();
+  });
+  $('#plan-result').addEventListener('click', (e) => {
+    if (!e.target.closest('#plan-apply')) return;
+    const amounts = {};
+    $$('#plan-table tr[data-id]').forEach((tr) => {
+      amounts[tr.dataset.id] = num(tr.querySelector('.buy').textContent.replace(/[^\d]/g, ''));
+    });
+    if (!confirm('PayPay証券の各銘柄の積立設定を「毎月・この金額」に書き換えます（0円の銘柄は積立なしになります）。よろしいですか？\n※PayPay証券アプリ側の積立設定も、ご自身で同じ金額に変更してください。')) return;
+    for (const h of state.holdings) {
+      if (h.broker !== 'paypay' || !(h.id in amounts)) continue;
+      h.tsumitate = amounts[h.id] > 0 ? { freq: 'monthly', amount: amounts[h.id] } : null;
+    }
+    save(); render();
+    toast('積立設定に反映しました');
+  });
+
   // ---------- 銘柄ダイアログ ----------
   const dlgH = $('#dlg-holding');
   const formH = $('#form-holding');
@@ -678,6 +843,7 @@
         qty: num(h.qty), cost: num(h.cost), nav: num(h.nav),
         proxy: h.type === 'fund' && typeof h.proxy === 'string' ? normalizeSymbol(h.proxy) : '',
         proxyRef: num(h.proxyRef) || null,
+        target: Number.isFinite(h.target) ? Math.max(0, Math.min(100, h.target)) : undefined,
         tsumitate: h.tsumitate && FREQ_LABEL[h.tsumitate.freq] ? { freq: h.tsumitate.freq, amount: num(h.tsumitate.amount) } : null,
       }));
       if (!confirm(`${clean.length}件の銘柄を読み込みます。今のデータは置き換わります。よろしいですか？`)) return;
