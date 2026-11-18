@@ -990,15 +990,28 @@
     $('#value-target').textContent = `${displayName(h, null)}（${BROKER_LABEL[h.broker]}・前回${navAgeDays(h) == null ? '' : ' ' + navDateLabel(h)}：${yen(r.value)}）`;
     formV.qty.value = num(h.qty) || '';
     formV.gainSign.value = r.gain != null && r.gain > 0 ? '+' : '-';
+    formV.dataset.prev = r.value || '';
+    $('#value-preview').textContent = '';
     dlgV.showModal();
     formV.value.focus();
   }
+  // 入力中の金額をカンマ区切りで見せる（桁の間違いに気づけるように）
+  formV.value.addEventListener('input', () => {
+    const v = num(formV.value.value);
+    $('#value-preview').textContent = v > 0 ? `入力中：${yen(v)}` : '';
+  });
   formV.addEventListener('submit', (e) => {
     e.preventDefault();
     const h = state.holdings.find((x) => x.id === valuingId);
     if (!h) return;
     const value = num(formV.value.value), qty = num(formV.qty.value);
     if (!(value > 0) || !(qty > 0)) { toast('評価額と口数を入れてください'); return; }
+    // 桁の打ち間違い（1桁多い・少ない）を防ぐ
+    const prev = num(formV.dataset.prev);
+    if (prev > 0 && (value / prev >= 2 || value / prev <= 0.5)) {
+      const times = value / prev >= 2 ? `約${Math.round(value / prev)}倍` : `約${Math.round(prev / value)}分の1`;
+      if (!confirm(`入れた評価額は ${yen(value)} です。\n前回（${yen(prev)}）の${times}ですが、桁は合っていますか？`)) return;
+    }
     h.qty = qty;
     h.nav = (value * 10000) / qty; // 1万口あたりの基準価額に直す
     h.navDate = todayStr();
