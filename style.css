@@ -283,3 +283,15 @@ dialog legend { font-size: 12px; color: var(--text-3); padding: 0 4px; }
 .deposit-day { font-size: 12px; color: var(--text-3); display: grid; gap: 4px; }
 .deposit-day span { display: flex; align-items: center; gap: 4px; color: var(--text-2); }
 .deposit-day input { width: 3.4em; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); text-align: right; font-size: 16px; }
+
+/* 入金日のお知らせ */
+.alert-card { border: 1.5px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.alert-card.soon { border-color: var(--border); background: var(--surface); }
+.alert-head { display: flex; align-items: center; gap: 8px; font-size: 16px; color: var(--accent); }
+.alert-card.soon .alert-head { color: var(--text); }
+.alert-card p { margin: 8px 0 4px; }
+.alert-card ul { margin: 4px 0 0; padding-left: 1.3em; }
+.alert-actions { margin-top: 12px; display: flex; justify-content: flex-end; }
+.alert-actions .btn { padding: 8px 18px; font-size: 14px; }
+.deposit-status { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.done-mark { color: var(--text-2); font-weight: 700; }

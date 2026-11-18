@@ -20,7 +20,7 @@
   // ---------- 状態 ----------
   const defaultSettings = {
     refreshSec: 30, finnhubKey: '', proxy: '', scope: 'paypay', sort: 'value', simRate: 5, simYears: 10,
-    planBudget: 4000, planMinStock: 1000, planMinFund: 100, goalAmount: 1000000, goalYears: 10, depositDay: 1,
+    planBudget: 4000, planMinStock: 1000, planMinFund: 100, goalAmount: 1000000, goalYears: 10, depositDay: 1, depositDone: '',
   };
   let state = load(STORE_KEY, { holdings: [], settings: { ...defaultSettings } });
   state.settings = { ...defaultSettings, ...(state.settings || {}) };
@@ -627,71 +627,78 @@
   const WEEKDAY = '日月火水木金土';
   const fmtDate = (d) => `${d.getMonth() + 1}月${d.getDate()}日（${WEEKDAY[d.getDay()]}）`;
   const depositDayOf = () => Math.min(28, Math.max(1, Math.round(num(state.settings.depositDay)) || 1));
+  const ymKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const daysBetween = (a, b) => Math.round((b - a) / 86400000);
+  const LATE_DAYS = 7; // 入金日を過ぎてもこの日数はお知らせを出し続ける
 
-  /** 次の入金日（今日が入金日なら今日） */
-  function nextDeposit() {
+  /** 入金日の状況。alert: today=今日 / late=過ぎたのに未入金 / soon=もうすぐ / null=なし */
+  function depositStatus() {
     const day = depositDayOf();
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    let d = new Date(today.getFullYear(), today.getMonth(), day);
-    if (d < today) d = new Date(today.getFullYear(), today.getMonth() + 1, day);
-    return { d, day, days: Math.round((d - today) / 86400000) };
+    const n = new Date();
+    const today = new Date(n.getFullYear(), n.getMonth(), n.getDate());
+    const isDone = (d) => state.settings.depositDone === ymKey(d);
+    const thisD = new Date(today.getFullYear(), today.getMonth(), day);
+    const since = daysBetween(thisD, today);
+    const next = since > 0 || isDone(thisD) ? new Date(today.getFullYear(), today.getMonth() + 1, day) : thisD;
+    const days = daysBetween(today, next);
+    let alert = null, target = null;
+    if (since >= 0 && since <= LATE_DAYS && !isDone(thisD)) { alert = since === 0 ? 'today' : 'late'; target = thisD; }
+    else if (days >= 1 && days <= 2 && !isDone(next)) { alert = 'soon'; target = next; }
+    const doneD = [thisD, next].find(isDone) || null;
+    return { day, d: next, days, since, alert, target, doneD };
   }
 
   function renderDeposit() {
-    const nd = nextDeposit();
-    if (document.activeElement !== $('#deposit-day')) $('#deposit-day').value = nd.day;
-    $('#deposit-next').textContent = fmtDate(nd.d);
-    $('#deposit-days').textContent = nd.days === 0 ? '今日です！' : nd.days === 1 ? '明日' : `あと${nd.days}日`;
-    $('#deposit-box').classList.toggle('today', nd.days <= 1);
-    return nd;
+    const st = depositStatus();
+    if (document.activeElement !== $('#deposit-day')) $('#deposit-day').value = st.day;
+    $('#deposit-next').textContent = fmtDate(st.d);
+    $('#deposit-days').textContent = st.days === 0 ? '今日です！' : st.days === 1 ? '明日' : `あと${st.days}日`;
+    $('#deposit-box').classList.toggle('today', st.days <= 1 && !st.doneD);
+    $('#deposit-status').innerHTML = st.doneD
+      ? `<span class="done-mark">✓ ${st.doneD.getMonth() + 1}月分は入金済み</span> <button type="button" class="btn small" data-act="undo">取り消す</button>`
+      : '';
+    return st;
   }
+
+  /** アプリを開いたときに一番上に出すお知らせ */
+  function renderDepositAlert(st, buys, budget) {
+    const box = $('#deposit-alert');
+    box.hidden = !st.alert;
+    if (!st.alert) return;
+    const title = {
+      today: '今日は入金日です',
+      late: `${fmtDate(st.target)}の入金はお済みですか？`,
+      soon: `${st.days === 1 ? '明日' : 'あさって'}（${fmtDate(st.target)}）は入金日です`,
+    }[st.alert];
+    box.className = 'card alert-card ' + st.alert;
+    box.innerHTML = `
+      <div class="alert-head">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 0 0-5.5-6.84V3.5a1.5 1.5 0 0 0-3 0v.66A7 7 0 0 0 5 11v5l-1.7 1.7a1 1 0 0 0 .7 1.7h16a1 1 0 0 0 .7-1.7L19 16z"/></svg>
+        <strong>${title}</strong>
+      </div>
+      <p>PayPay証券に <strong>${yen(budget)}</strong> を入金${buys.length ? 'して、これを買います' : 'します'}</p>
+      ${buys.length ? `<ul>${buys.map((b) => `<li>${esc(b.x.name)}：<strong>${yen(b.a)}</strong></li>`).join('')}</ul>` : ''}
+      <div class="alert-actions">
+        <button type="button" class="btn primary small" data-act="done">${st.alert === 'soon' ? '先に入金した' : '入金した'}</button>
+      </div>`;
+    box.dataset.target = ymKey(st.target);
+  }
+
+  $('#deposit-alert').addEventListener('click', (e) => {
+    if (!e.target.closest('[data-act="done"]')) return;
+    state.settings.depositDone = $('#deposit-alert').dataset.target;
+    save(); render();
+    toast('おつかれさまです。今月の積立は完了です');
+  });
+  $('#deposit-status').addEventListener('click', (e) => {
+    if (!e.target.closest('[data-act="undo"]')) return;
+    state.settings.depositDone = '';
+    save(); render();
+  });
 
   $('#deposit-day').addEventListener('input', () => {
     const v = Math.round(num($('#deposit-day').value));
     if (v >= 1 && v <= 28) { state.settings.depositDay = v; save(); render(); }
-  });
-
-  /** 毎月の入金日に通知が出る、繰り返しのカレンダー予定（.ics）を作る */
-  function buildCalendar() {
-    const nd = nextDeposit();
-    const pad = (n) => String(n).padStart(2, '0');
-    const ymd = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
-    const end = new Date(nd.d); end.setDate(end.getDate() + 1);
-    const icsText = (t) => String(t).replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/([,;])/g, '\\$1');
-    const appUrl = location.origin + location.pathname;
-    const budget = yen(Math.max(0, num(state.settings.planBudget)));
-    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
-    const lines = [
-      'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//kabu-portfolio//JA', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
-      'BEGIN:VEVENT',
-      `UID:kabu-deposit-${uid()}@kabu-portfolio`,
-      `DTSTAMP:${stamp}`,
-      `DTSTART;VALUE=DATE:${ymd(nd.d)}`,
-      `DTEND;VALUE=DATE:${ymd(end)}`,
-      `RRULE:FREQ=MONTHLY;BYMONTHDAY=${nd.day}`,
-      `SUMMARY:${icsText(`積立の入金日（PayPay証券 ${budget}）`)}`,
-      `DESCRIPTION:${icsText(`今月 ${budget} を入金する日です。\n何をいくら買うかはアプリで確認：${appUrl}`)}`,
-      `URL:${appUrl}`,
-      'BEGIN:VALARM', 'ACTION:DISPLAY', 'TRIGGER:PT9H', `DESCRIPTION:${icsText(`積立の入金日です（${budget}）`)}`, 'END:VALARM',
-      'END:VEVENT', 'END:VCALENDAR',
-    ];
-    return lines.join('\r\n') + '\r\n';
-  }
-
-  $('#btn-calendar').addEventListener('click', () => {
-    const ics = buildCalendar();
-    if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
-      // iPhoneはこれでカレンダーの「追加」画面が開く
-      location.href = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
-      return;
-    }
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }));
-    a.download = 'tsumitate-reminder.ics';
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    toast('カレンダー用ファイルを保存しました。開くとカレンダーに追加できます');
   });
 
   // ---------- 来月の積立プラン ----------
@@ -742,7 +749,7 @@
     const rows = all.filter((r) => r.h.broker === 'paypay');
     const card = $('#plan-card');
     card.hidden = rows.length === 0;
-    if (!rows.length) return;
+    if (!rows.length) { $('#deposit-alert').hidden = true; return; }
     const nd = renderDeposit();
 
     const st = state.settings;
@@ -801,6 +808,7 @@
 
     const buys = items.map((x, i) => ({ x, a: plan.alloc[i], after: plan.after[i] }))
       .filter((b) => b.a > 0).sort((a, b) => b.a - a.a);
+    renderDepositAlert(nd, buys, budget);
     $('#plan-result').innerHTML = buys.length ? `
       <div class="plan-summary">
         <strong>${nd.days === 0 ? '今日' : fmtDate(nd.d) + 'に'}買うもの</strong>

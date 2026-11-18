@@ -31,6 +31,9 @@
   </header>
 
   <main class="wrap">
+    <!-- 入金日のお知らせ（入金日の前後だけ出る） -->
+    <section class="card alert-card" id="deposit-alert" role="status" hidden></section>
+
     <!-- 目標金額 -->
     <section class="card" id="goal-card">
       <h2>目標まで</h2>
@@ -68,7 +71,7 @@
         <label class="deposit-day">入金日
           <span>毎月<input id="deposit-day" type="number" min="1" max="28" step="1" inputmode="numeric">日</span>
         </label>
-        <button type="button" id="btn-calendar" class="btn small">カレンダーに登録（毎月お知らせ）</button>
+        <div class="deposit-status" id="deposit-status"></div>
       </div>
       <div id="plan-result"></div>
       <p class="note">毎月 <strong id="plan-budget-label">—</strong> を、今の割合をくずさないように銘柄ごとに分けた目安です（金額は上の「目標まで」で変更）。値上がりの予想ではありません。</p>
